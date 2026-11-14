@@ -28,6 +28,7 @@ peerDependencyRules:
 
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@1.1.0
+  "@effect/platform-node-shared": 4.0.2
   "@effect/sql-d1": 4.0.2
   "@effect/sql-sqlite-do": 4.0.2
   unenv: 2.0.0-rc.24

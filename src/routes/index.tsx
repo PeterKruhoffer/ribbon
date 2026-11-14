@@ -15,7 +15,13 @@ function Home() {
   const greeting = Route.useLoaderData();
   return (
     <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
-      <h1>{greeting}</h1>
+      <div>
+        <h1>{greeting}</h1>
+        <p>
+          Live demo: <a href="/lists/demo">guest view</a> ·{" "}
+          <a href="/lists/demo?as=owner">owner view</a>
+        </p>
+      </div>
     </main>
   );
 }
