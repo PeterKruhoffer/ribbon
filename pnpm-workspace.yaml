@@ -1,0 +1,33 @@
+packages:
+  - .
+
+# Fail closed on new releases, unknown publish dates, and trust downgrades.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+# Legacy releases can predate consistent provenance across major branches.
+# Keep downgrade checks for releases from the last 30 days.
+trustPolicyIgnoreAfter: 43200
+trustLockfile: false
+blockExoticSubdeps: true
+
+# New install scripts require a reviewed decision, even in CI.
+strictDepBuilds: true
+allowBuilds:
+  # The optional platform package already contains the binary. No downloader needed.
+  workerd@1.20260918.1: false
+verifyDepsBeforeRun: error
+skills:
+  dirs: []
+
+# The Vite+ core reports its toolchain version, but contains Vite 8.3.3.
+peerDependencyRules:
+  allowedVersions:
+    vite: 1.1.0
+
+overrides:
+  vite@*: npm:@voidzero-dev/vite-plus-core@1.1.0
+  "@effect/sql-d1": 4.0.2
+  "@effect/sql-sqlite-do": 4.0.2
+  unenv: 2.0.0-rc.24

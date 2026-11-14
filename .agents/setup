@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v pnpm >/dev/null 2>&1; then
+  npm install --global --prefix "$HOME/.local" --ignore-scripts pnpm@12.11.1
+fi
+# pnpm selects the exact packageManager version from package.json.
+[[ "$(pnpm --version)" == "12.11.1" ]]
+
+# Amp and supervised services start in separate login shells.
+profile_marker="# Ribbon package tools"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
+  export PATH="\$HOME/.local/bin:\$PATH"
+fi
+EOF
+fi
+
+echo "Installing locked dependencies"
+time pnpm install --frozen-lockfile

@@ -1,0 +1,36 @@
+{
+  "name": "ribbon",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev --port 3000",
+    "dev:cloudflare": "alchemy dev",
+    "build": "vp build",
+    "typecheck": "tsc --noEmit",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "check": "vp check",
+    "deploy": "alchemy deploy"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-start": "1.168.60",
+    "effect": "4.0.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "alchemy": "2.0.0-beta.81",
+    "typescript": "6.0.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vite-plus": "1.1.0"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@12.11.1"
+}
