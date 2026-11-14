@@ -12,5 +12,6 @@ Ribbon is a shared gift wish list. The owner shares a link. Guests claim items, 
 - Put server logic in the Effect Backend and Durable Object (`src/backend`). TanStack Start only renders pages.
 - Parse untrusted input with `Schema`. Shared schemas and tagged errors live in `src/shared`.
 - `alchemy.run.ts` defines all Cloudflare infrastructure. Do not add Wrangler config or `@cloudflare/vite-plugin`.
+- Import Alchemy's Cloudflare resources from `@alchemy.run/cloudflare`. Alchemy 2.0.0-beta.84 removed `alchemy/Cloudflare`.
 - The owner must never receive claim data or claim events. See [Live updates](live-updates.md).
 - Never commit secrets.

@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { ClientMessage, entityTopic, type LiveEvent } from "../live/protocol.ts";

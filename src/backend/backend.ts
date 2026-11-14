@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import Wishlist from "./wishlist.ts";
@@ -15,6 +15,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
   {
     main: import.meta.url,
     compatibility: { date: "2026-09-25", flags: ["nodejs_compat"] },
+    dev: { port: 1337 },
   },
   Effect.gen(function* () {
     const lists = yield* Wishlist;

@@ -1,11 +1,12 @@
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import Backend from "./src/backend/backend.ts";
 
 export const Website = Cloudflare.Website.Vite("Website", {
   main: "./src/worker.ts",
   compatibility: { date: "2026-09-25", flags: ["nodejs_compat"] },
+  dev: { port: 1338 },
   env: { BACKEND: Backend },
 });
 

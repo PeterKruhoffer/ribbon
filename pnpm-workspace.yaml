@@ -16,7 +16,7 @@ blockExoticSubdeps: true
 strictDepBuilds: true
 allowBuilds:
   # The optional platform package already contains the binary. No downloader needed.
-  workerd@1.20260918.1: false
+  workerd@1.20261026.1: false
 verifyDepsBeforeRun: error
 skills:
   dirs: []
@@ -28,14 +28,7 @@ peerDependencyRules:
 
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@1.6.0
-  "@effect/platform-node-shared": 4.0.2
-  "@effect/sql-d1": 4.0.2
-  "@effect/sql-sqlite-do": 4.0.2
+  "@effect/platform-node-shared": 4.1.4
+  "@effect/sql-d1": 4.1.4
+  "@effect/sql-sqlite-do": 4.1.4
   unenv: 2.0.0-rc.24
-  # Patched releases for Dependabot alerts. alchemy 2.0.0-beta.81 pulls these in
-  # through @prisma/dev, which only the Alchemy CLI loads. Remove these after
-  # moving to alchemy beta.84 or later, which drops @prisma/dev.
-  hono: 4.13.18
-  "@hono/node-server": 2.1.8
-  lodash: 4.18.1
-  valibot: 1.5.0
