@@ -29,7 +29,7 @@
     "alchemy": "2.0.0-beta.81",
     "typescript": "6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
-    "vite-plus": "1.1.0"
+    "vite-plus": "1.3.0"
   },
   "engines": {
     "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
