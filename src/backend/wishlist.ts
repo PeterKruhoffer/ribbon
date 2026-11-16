@@ -2,7 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { ClientMessage, entityTopic, type LiveEvent } from "../live/protocol.ts";
-import { FullyClaimed, ItemNotFound, type ListView, Role } from "../shared/wishlist.ts";
+import {
+  FullyClaimed,
+  ItemNotFound,
+  ListNotFound,
+  type ListView,
+  type NewList,
+  Role,
+} from "../shared/wishlist.ts";
 
 // One Durable Object per wish list. It owns the list's data in its SQLite
 // storage and every open WebSocket for the list, so a claim and the live
@@ -17,12 +24,6 @@ const Attachment = Schema.Struct({
 });
 const maxSubscriptions = 200;
 const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(ClientMessage));
-
-const demoItems = [
-  { id: "lego", title: "LEGO Botanical bonsai tree", quantity: 1 },
-  { id: "wingspan", title: "Wingspan board game", quantity: 1 },
-  { id: "socks", title: "Wool socks", quantity: 5 },
-];
 
 export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
   "Wishlist",
@@ -40,22 +41,6 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
       yield* sql.exec(
         "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
       );
-
-      // Spike: every list starts with the same demo items.
-      const seed = Effect.fn("Wishlist.seed")(function* (listId: string) {
-        const seeded = yield* (yield* sql.exec("SELECT 1 FROM meta WHERE key = 'title'")).toArray();
-        if (seeded.length > 0) return;
-        yield* sql.exec("INSERT INTO meta VALUES ('title', ?)", `Wish list ${listId}`);
-        for (const [position, item] of demoItems.entries()) {
-          yield* sql.exec(
-            "INSERT INTO item VALUES (?, ?, ?, ?)",
-            item.id,
-            item.title,
-            item.quantity,
-            position,
-          );
-        }
-      });
 
       // Send an event to every guest socket subscribed to the topic. Owner
       // sockets are skipped: even "something changed" would spoil a gift.
@@ -79,11 +64,27 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
       });
 
       return {
+        // The Backend picks a fresh random id for each new list, so this object
+        // starts empty. Item ids are random too, so they never repeat within a
+        // list once items can be removed.
+        create: Effect.fn("Wishlist.create")(function* (list: NewList) {
+          yield* sql.exec("INSERT INTO meta VALUES ('title', ?)", list.title);
+          for (const [position, item] of list.items.entries()) {
+            yield* sql.exec(
+              "INSERT INTO item VALUES (?, ?, ?, ?)",
+              crypto.randomUUID(),
+              item.title,
+              item.quantity,
+              position,
+            );
+          }
+        }),
+
         read: Effect.fn("Wishlist.read")(function* (listId: string, role: Role) {
-          yield* seed(listId);
           const [meta] = yield* (yield* sql.exec<{ value: string }>(
             "SELECT value FROM meta WHERE key = 'title'",
           )).toArray();
+          if (!meta) return yield* new ListNotFound({ listId });
           const rows = yield* (yield* sql.exec<{
             id: string;
             title: string;
@@ -93,7 +94,7 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
             "SELECT item.id, item.title, item.quantity, COUNT(claim.id) AS claimed FROM item LEFT JOIN claim ON claim.item_id = item.id GROUP BY item.id ORDER BY item.position",
           )).toArray();
           const view: ListView = {
-            title: meta!.value,
+            title: meta.value,
             items: rows.map(({ id, title, quantity, claimed }) =>
               role === "owner"
                 ? { id, title, quantity }
@@ -106,12 +107,7 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
         // One conditional INSERT checks and claims in a single statement, so two
         // guests racing for the last item cannot both win, even if the fibers
         // handling their requests interleave.
-        claim: Effect.fn("Wishlist.claim")(function* (
-          listId: string,
-          itemId: string,
-          guest: string,
-        ) {
-          yield* seed(listId);
+        claim: Effect.fn("Wishlist.claim")(function* (itemId: string, guest: string) {
           // RETURNING makes the inserted row the result, which is reliable where
           // the cursor's rowsWritten counter is not.
           const inserted = yield* (yield* sql.exec(

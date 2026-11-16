@@ -16,6 +16,25 @@ export const Item = Schema.Struct({
 export const ListView = Schema.Struct({ title: Schema.String, items: Schema.Array(Item) });
 export type ListView = typeof ListView.Type;
 
+const Text = (maxLength: number) =>
+  Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(maxLength));
+
+// Body of POST /api/lists.
+export const NewList = Schema.Struct({
+  title: Text(100),
+  items: Schema.Array(
+    Schema.Struct({
+      title: Text(200),
+      quantity: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99 })),
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
+});
+export type NewList = typeof NewList.Type;
+
+export class ListNotFound extends Schema.TaggedError<ListNotFound>()("ListNotFound", {
+  listId: Schema.String,
+}) {}
+
 export class ItemNotFound extends Schema.TaggedError<ItemNotFound>()("ItemNotFound", {
   itemId: Schema.String,
 }) {}

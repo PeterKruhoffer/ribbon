@@ -28,22 +28,26 @@ Wishlist Durable Object ... src/backend/wishlist.ts
 
 **Wishlist Durable Object.** An Effect Durable Object (`Cloudflare.DurableObject`). One instance per list, addressed by list id. It stores the list in its own SQLite storage and holds the list's WebSockets. Methods:
 
-| Method                         | Does                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `read(listId, role)`           | Returns the list. Guests get `remaining`, the owner does not.                                    |
-| `claim(listId, itemId, guest)` | Claims one unit, then sends a live event to guests. Fails with `FullyClaimed` or `ItemNotFound`. |
-| `fetch`                        | Opens a WebSocket for `/live`.                                                                   |
-| `webSocketMessage`             | Handles subscribe and unsubscribe.                                                               |
+| Method                 | Does                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `create(list)`         | Stores a new list's title and items. Item ids are random UUIDs.                                  |
+| `read(listId, role)`   | Returns the list. Guests get `remaining`, the owner does not. Fails with `ListNotFound`.         |
+| `claim(itemId, guest)` | Claims one unit, then sends a live event to guests. Fails with `FullyClaimed` or `ItemNotFound`. |
+| `fetch`                | Opens a WebSocket for `/live`.                                                                   |
+| `webSocketMessage`     | Handles subscribe and unsubscribe.                                                               |
 
 ## API
 
-| Request                                       | Result                                                              |
-| --------------------------------------------- | ------------------------------------------------------------------- |
-| `GET /api/lists/:listId`                      | List view. Add `?as=owner` for the owner view.                      |
-| `POST /api/lists/:listId/items/:itemId/claim` | Body `{ "guest": "<token>" }`. 200, 404, 409, or 403 for the owner. |
-| `GET /api/lists/:listId/live`                 | WebSocket upgrade. See [Live updates](live-updates.md).             |
+| Request                                       | Result                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `POST /api/lists`                             | Body `{ title, items: [{ title, quantity }] }`. 201 `{ listId }` or 400. |
+| `GET /api/lists/:listId`                      | List view, or 404. Add `?as=owner` for the owner view.                   |
+| `POST /api/lists/:listId/items/:itemId/claim` | Body `{ "guest": "<token>" }`. 200, 404, 409, or 403 for the owner.      |
+| `GET /api/lists/:listId/live`                 | WebSocket upgrade. See [Live updates](live-updates.md).                  |
 
-`?as=owner` is a stand-in until owners can sign in. New lists start with three demo items.
+Limits: titles 1 to 100 characters after trimming, 1 to 50 items, item titles up to 200 characters, quantities 1 to 99.
+
+The list id is a random UUID, and the guest share link is `/lists/:listId`. `?as=owner` is a stand-in until owners can sign in (planned: Clerk). Anyone with the link can open the owner view.
 
 ## Files
 

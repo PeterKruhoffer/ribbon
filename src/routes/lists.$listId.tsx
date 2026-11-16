@@ -4,9 +4,9 @@ import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
 import type { ListView, Role } from "../shared/wishlist.ts";
 
-// Spike page: open it as a guest in two tabs and as the owner in a third.
-// A claim in one guest tab updates the other guest tab live; the owner tab
-// receives no events. ?as=owner stands in for real authentication.
+// One list. Guests claim items, and a claim in one guest tab updates the
+// others live; the owner sees the share link and receives no claim events.
+// ?as=owner stands in for real authentication.
 
 export const Route = createFileRoute("/lists/$listId")({
   validateSearch: (search: Record<string, unknown>): { as?: "owner" } =>
@@ -27,20 +27,21 @@ function ListPage() {
   const { listId } = Route.useParams();
   const role: Role = Route.useSearch().as === "owner" ? "owner" : "guest";
   const query = role === "owner" ? "?as=owner" : "";
-  const [list, setList] = useState<ListView>();
+  const [list, setList] = useState<ListView | "missing">();
   const [events, setEvents] = useState(0);
   const [error, setError] = useState<string>();
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/lists/${listId}${query}`);
-    setList((await response.json()) as ListView);
+    setList(response.status === 404 ? "missing" : ((await response.json()) as ListView));
   }, [listId, query]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const itemIds = list?.items.map((item) => item.id).join(",");
+  const itemIds = list === "missing" ? undefined : list?.items.map((item) => item.id).join(",");
   useEffect(() => {
     if (!itemIds) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -71,10 +72,30 @@ function ListPage() {
   };
 
   if (!list) return <main style={{ padding: 24 }}>Loading…</main>;
+  if (list === "missing")
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>List not found</h1>
+        <p>
+          Check the link, or <a href="/">make a new list</a>.
+        </p>
+      </main>
+    );
+  const shareUrl = `${location.origin}/lists/${listId}`;
   return (
     <main style={{ padding: 24, maxWidth: 520 }}>
       <h1 style={{ marginBottom: 4 }}>{list.title}</h1>
       <p style={{ color: "#666", marginTop: 0 }}>Viewing as {role}</p>
+      {role === "owner" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <input readOnly aria-label="Share link" value={shareUrl} style={{ flex: 1 }} data-share />
+          <button
+            onClick={() => void navigator.clipboard.writeText(shareUrl).then(() => setCopied(true))}
+          >
+            {copied ? "Copied" : "Copy share link"}
+          </button>
+        </div>
+      )}
       <ul style={{ listStyle: "none", padding: 0 }}>
         {list.items.map((item) => (
           <li

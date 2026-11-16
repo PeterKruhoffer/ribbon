@@ -35,9 +35,9 @@ Keep the compatibility date in `alchemy.run.ts` at or below what the local worke
 Deploying to verify work is allowed.
 
 1. `pnpm run deploy --stage dev --yes` prints `url` and `backendUrl`.
-2. `pnpm verify:live <url>` checks live delivery, the owner getting no events, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
+2. `pnpm verify:live <url>` checks list creation, live delivery, the owner getting no events, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
 
-Demo: open `<url>/lists/demo` in two tabs and `<url>/lists/demo?as=owner` in a third.
+Demo: create a list at `<url>`. It opens the owner view; open its share link in two more tabs as guests.
 
 ## Orbs
 
