@@ -9,10 +9,20 @@ import { color, font } from "./tokens.stylex.ts";
 const MOBILE = "@media (max-width: 480px)";
 const REDUCED = "@media (prefers-reduced-motion: reduce)";
 
-export function Page({ children }: { children: ReactNode }) {
+// `wide` gives the landing page room on desktop. `afterSignIn` is where signing
+// in from the header goes; without it, the visitor stays on the page.
+export function Page({
+  children,
+  wide = false,
+  afterSignIn,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+  afterSignIn?: string;
+}) {
   return (
     <main {...stylex.props(s.page)}>
-      <div {...stylex.props(s.sheet)}>
+      <div {...stylex.props(s.sheet, wide && s.wide)}>
         <header {...stylex.props(s.header)}>
           <a href="/" {...stylex.props(s.brand)}>
             <Bow size={22} />
@@ -22,7 +32,11 @@ export function Page({ children }: { children: ReactNode }) {
             <UserButton />
           </Show>
           <Show when="signed-out">
-            <SignInButton mode="modal">
+            <SignInButton
+              mode="modal"
+              forceRedirectUrl={afterSignIn}
+              signUpForceRedirectUrl={afterSignIn}
+            >
               <button {...stylex.props(ui.button, ui.quiet, s.signIn)}>Sign in</button>
             </SignInButton>
           </Show>
@@ -174,6 +188,7 @@ const s = stylex.create({
     borderRadius: { default: 8, [MOBILE]: 0 },
     boxShadow: { default: `0 0 0 1px ${color.line}`, [MOBILE]: "none" },
   },
+  wide: { maxWidth: 960, paddingInline: { default: 56, [MOBILE]: 20 } },
   header: {
     display: "flex",
     alignItems: "center",

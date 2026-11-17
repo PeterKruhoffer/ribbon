@@ -33,8 +33,8 @@ function RootDocument() {
       <body>
         {/* Clerk runs in the browser only. The Backend verifies its session
             tokens, so the pages need no server-side Clerk middleware. Clerk
-            navigates through the router after sign-in, so the page and a
-            drafted list stay put instead of reloading. */}
+            navigates through the router after sign-in, so the page does not
+            reload. */}
         <ClerkProvider
           publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
           routerPush={(href) => router.navigate({ href })}

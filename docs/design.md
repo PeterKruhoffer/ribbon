@@ -10,7 +10,7 @@ Titles use Literata and everything else uses Figtree. Both fonts are self-hosted
 
 - Style components with StyleX (`@stylexjs/stylex`). Do not add inline `style` props or other CSS libraries.
 - Colors and fonts live in `src/ui/tokens.stylex.ts` as `defineVars`. Use the tokens instead of writing hex values in components.
-- `src/ui/kit.tsx` holds the shared pieces: `Page`, `Ribbon`, `Bow`, the `row` styles for lines on the ribbon, and `ui` styles for titles, fields, and buttons. `src/ui/figures.tsx` holds the illustrations.
+- `src/ui/kit.tsx` holds the shared pieces: `Page` (a 600 px sheet; `wide` makes it 960 px for the landing page), `Ribbon`, `Bow`, the `row` styles for lines on the ribbon, and `ui` styles for titles, fields, and buttons. `src/ui/figures.tsx` holds the illustrations.
 - `src/styles.css` holds only the font imports and the page reset.
 - Write borders as longhands (`borderWidth`, `borderStyle`, `borderColor`, `borderBottomWidth`, and so on). StyleX 0.19 drops the `border` and `borderBottom` shorthands without an error.
 
