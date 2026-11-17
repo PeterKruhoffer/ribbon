@@ -1,12 +1,12 @@
 import { useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
 import type { ListView } from "../shared/wishlist.ts";
 import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
-import { Bow, Page, readError, Ribbon, row, ui } from "../ui/kit.tsx";
+import { Page, readError, Ribbon, row, Tag, ui } from "../ui/kit.tsx";
 import { color } from "../ui/tokens.stylex.ts";
 
 // One list. Guests claim items, and a claim in one guest tab updates the
@@ -37,6 +37,9 @@ function ListPage() {
   const [claiming, setClaiming] = useState<string>();
   // Each claim gets a new id, so its figure remounts and its animation plays again.
   const [claimed, setClaimed] = useState<{ id: number; title: string }>();
+  // Items already taken when the list first showed. Their tags hang still; the
+  // tag swings in only for an item that becomes taken while the page is open.
+  const takenAtLoad = useRef<{ listId: string; ids: Set<string> }>(undefined);
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const token = await getToken();
@@ -116,6 +119,12 @@ function ListPage() {
         </p>
       </Page>
     );
+  if (takenAtLoad.current?.listId !== listId)
+    takenAtLoad.current = {
+      listId,
+      ids: new Set(list.items.filter((item) => item.remaining === 0).map((item) => item.id)),
+    };
+  const takenIds = takenAtLoad.current.ids;
   const shareUrl = `${location.origin}/lists/${listId}`;
   const owner = list.role === "owner";
   return (
@@ -151,8 +160,8 @@ function ListPage() {
             return (
               <li key={item.id} data-item={item.id} {...stylex.props(row.base)}>
                 {!owner && taken && (
-                  <span {...stylex.props(row.bow)}>
-                    <Bow tied />
+                  <span {...stylex.props(row.tag)}>
+                    <Tag swing={!takenIds.has(item.id)} />
                   </span>
                 )}
                 <span {...stylex.props(s.name, taken && ui.soft)}>{item.title}</span>

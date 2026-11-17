@@ -3,8 +3,8 @@ import { Show, SignInButton, UserButton } from "@clerk/react";
 import type { ReactNode } from "react";
 import { color, font } from "./tokens.stylex.ts";
 
-// Shared pieces of the Ribbon look. The ribbon runs down every list, and a bow
-// ties onto it for each gift that guests have fully claimed.
+// Shared pieces of the Ribbon look. The ribbon runs down every list, and a gift
+// tag hangs on it for each gift that guests have fully claimed.
 
 const MOBILE = "@media (max-width: 480px)";
 const REDUCED = "@media (prefers-reduced-motion: reduce)";
@@ -56,29 +56,65 @@ export function Ribbon({ children }: { children: ReactNode }) {
   );
 }
 
-export function Bow({ size = 38, tied = false }: { size?: number; tied?: boolean }) {
+// The bow's shapes in a 40 × 28 box, knot at (20, 14).
+function BowShapes() {
   return (
-    <svg
-      aria-hidden
-      width={size}
-      height={(size * 28) / 40}
-      viewBox="0 0 40 28"
-      {...stylex.props(tied && s.tied)}
-    >
+    <>
       <path d="M20 14C12 1 1 4 4 12s12 6 16 2Z" {...stylex.props(s.loop)} />
       <path d="M20 14C28 1 39 4 36 12s-12 6-16 2Z" {...stylex.props(s.loop)} />
       <path d="M19 15 12 27l4-1 4-9Zm2 0 7 12-4-1-4-9Z" {...stylex.props(s.knot)} />
       <circle cx="20" cy="14" r="3.6" {...stylex.props(s.knot)} />
+    </>
+  );
+}
+
+function Bow({ size = 38 }: { size?: number }) {
+  return (
+    <svg aria-hidden width={size} height={(size * 28) / 40} viewBox="0 0 40 28">
+      <BowShapes />
     </svg>
   );
 }
 
-const tie = stylex.keyframes({
-  from: { opacity: 0, transform: "scale(1.5) rotate(-12deg)" },
+// The gift tag a claimed gift hangs on the ribbon: a white tag with a small bow,
+// on a string pinned at (20, 4), which is the ribbon's center. `swing` plays the
+// entrance; pass it only for a gift that became taken while the page was open.
+export function Tag({ swing = false }: { swing?: boolean }) {
+  return (
+    <svg aria-hidden width={56} height={64} viewBox="-6 -16 52 60" {...stylex.props(s.tagSvg)}>
+      <g {...stylex.props(s.tag, swing && s.swing)}>
+        <line x1="20" y1="4" x2="20" y2="13" {...stylex.props(s.string)} />
+        <path
+          d="M12 17 20 11 28 17V35a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2Z"
+          {...stylex.props(s.tagCard)}
+        />
+        <circle cx="20" cy="16.5" r="1.6" {...stylex.props(s.string)} />
+        <g transform="translate(20 27) scale(0.36) translate(-20 -14)">
+          <BowShapes />
+        </g>
+      </g>
+      <circle cx="20" cy="4" r="2.6" {...stylex.props(s.pin, swing && s.pinIn)} />
+    </svg>
+  );
+}
+
+// Swings in from the right and settles at the tag's resting tilt of -8°.
+const swingIn = stylex.keyframes({
+  "0%": { opacity: 0, transform: "rotate(75deg)" },
+  "12%": { opacity: 1 },
+  "35%": { transform: "rotate(-30deg)" },
+  "55%": { transform: "rotate(12deg)" },
+  "74%": { transform: "rotate(-14deg)" },
+  "88%": { transform: "rotate(-5deg)" },
+  "100%": { transform: "rotate(-8deg)" },
+});
+
+const pinIn = stylex.keyframes({
+  from: { opacity: 0, transform: "scale(0)" },
   to: { opacity: 1, transform: "none" },
 });
 
-// Rows that sit on the ribbon. The bow column lines up with the ribbon's center.
+// Rows that sit on the ribbon. `tag` puts a Tag's pin on the ribbon's center.
 export const row = stylex.create({
   base: {
     position: "relative",
@@ -91,12 +127,15 @@ export const row = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: color.line,
   },
-  bow: {
+  // The Tag is 56 px wide with its pin 28 px in, and the ribbon's center is 39 px
+  // (32 px on phones) left of the row.
+  tag: {
     position: "absolute",
-    left: { default: -58, [MOBILE]: -51 },
+    left: { default: -67, [MOBILE]: -60 },
     top: "50%",
-    marginTop: -13,
+    marginTop: -32,
     display: "flex",
+    pointerEvents: "none",
   },
 });
 
@@ -221,10 +260,37 @@ const s = stylex.create({
   },
   loop: { fill: color.ribbon },
   knot: { fill: color.ribbonDark },
-  tied: {
-    animationName: { default: tie, [REDUCED]: "none" },
-    animationDuration: "260ms",
-    animationTimingFunction: "cubic-bezier(0.2, 0.9, 0.3, 1.3)",
+  tagSvg: { display: "block", overflow: "visible" },
+  tag: {
+    transformBox: "view-box",
+    transformOrigin: "20px 4px",
+    transform: "rotate(-8deg)",
+  },
+  swing: {
+    animationName: { default: swingIn, [REDUCED]: "none" },
+    animationDuration: "1100ms",
+    animationTimingFunction: "cubic-bezier(0.4, 0, 0.4, 1)",
+    animationFillMode: "both",
+  },
+  string: { fill: "none", stroke: color.ink, strokeWidth: 1 },
+  tagCard: {
+    fill: color.sheet,
+    stroke: color.ink,
+    strokeWidth: 1.2,
+    strokeLinejoin: "round",
+  },
+  pin: {
+    fill: color.ribbonDark,
+    stroke: color.sheet,
+    strokeWidth: 1.6,
+    transformBox: "view-box",
+    transformOrigin: "20px 4px",
+  },
+  pinIn: {
+    animationName: { default: pinIn, [REDUCED]: "none" },
+    animationDuration: "160ms",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "both",
   },
 });
 
