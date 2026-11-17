@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
 import type { ListView, Role } from "../shared/wishlist.ts";
+import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Bow, Page, readError, Ribbon, row, ui } from "../ui/kit.tsx";
 import { color } from "../ui/tokens.stylex.ts";
 
@@ -35,7 +36,8 @@ function ListPage() {
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [claiming, setClaiming] = useState<string>();
-  const [claimed, setClaimed] = useState<string>();
+  // Each claim gets a new id, so its figure remounts and its animation plays again.
+  const [claimed, setClaimed] = useState<{ id: number; title: string }>();
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/lists/${listId}${query}`);
@@ -73,7 +75,7 @@ function ListPage() {
       method: "POST",
       body: JSON.stringify({ guest: guestToken() }),
     });
-    if (response.ok) setClaimed(title);
+    if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title }));
     else setError(await readError(response));
     await load();
     setClaiming(undefined);
@@ -82,12 +84,14 @@ function ListPage() {
   if (!list)
     return (
       <Page>
+        <WrappedGift style={s.waiting} />
         <p {...stylex.props(ui.small)}>Opening the list…</p>
       </Page>
     );
   if (list === "missing")
     return (
       <Page>
+        <OpenBox style={s.missing} />
         <h1 {...stylex.props(ui.title)}>List not found</h1>
         <p {...stylex.props(ui.sub)}>
           Check the link, or{" "}
@@ -170,11 +174,14 @@ function ListPage() {
               {error}
             </p>
           )}
-          <p aria-live="polite" data-events={events} {...stylex.props(ui.small)}>
-            {claimed
-              ? `You claimed ${claimed}. Other guests see it now.`
-              : "Claims show up for every guest right away."}
-          </p>
+          <div {...stylex.props(s.status)}>
+            {claimed && <ClaimGift key={claimed.id} style={s.claimFigure} />}
+            <p aria-live="polite" data-events={events} {...stylex.props(ui.small)}>
+              {claimed
+                ? `You claimed ${claimed.title}. Other guests see it now.`
+                : "Claims show up for every guest right away."}
+            </p>
+          </div>
         </div>
       )}
     </Page>
@@ -197,4 +204,8 @@ const s = stylex.create({
   },
   taken: { minWidth: 76, fontSize: 15, color: color.soft, textAlign: "center" },
   footer: { display: "grid", gap: 6, marginTop: 24 },
+  status: { display: "flex", alignItems: "center", gap: 12 },
+  claimFigure: { width: 64, flexShrink: 0 },
+  waiting: { width: 120, marginBottom: 16 },
+  missing: { maxWidth: 320, marginBottom: 20 },
 });

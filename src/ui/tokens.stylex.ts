@@ -15,6 +15,18 @@ export const color = stylex.defineVars({
   focus: "#1d4ed8",
 });
 
+// Fills for the isometric figures in src/ui/figures.tsx: shades of the ribbon
+// red for wrapped gifts, and warm grays for the sides of plain boxes.
+export const figure = stylex.defineVars({
+  wash: "#fbeef0",
+  pale: "#f4d3d8",
+  shade: "#e8b7bf",
+  muted: "#e39aa5",
+  left: "#f5eee9",
+  right: "#e9ded7",
+  rule: "#cfc3bc",
+});
+
 export const font = stylex.defineVars({
   title: '"Literata Variable", "Iowan Old Style", Palatino, Georgia, serif',
   body: '"Figtree Variable", "Avenir Next", system-ui, sans-serif',
