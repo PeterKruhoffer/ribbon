@@ -1,0 +1,25 @@
+/* Fonts and the page reset. Component styles are StyleX, in src/ui and the routes. */
+@import "@fontsource-variable/literata/opsz.css";
+@import "@fontsource-variable/figtree";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #faf6f3;
+  color: #26201c;
+  font-family: "Figtree Variable", "Avenir Next", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+button {
+  font: inherit;
+  color: inherit;
+}

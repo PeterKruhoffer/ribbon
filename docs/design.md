@@ -1,0 +1,17 @@
+# Design
+
+The Ribbon look puts a white sheet on warm paper and uses one ribbon red. A red ribbon runs down every list, and a bow ties onto it for each gift that guests have fully claimed. The owner sees the ribbon without bows, so the page never spoils who claimed what.
+
+Titles use Literata and everything else uses Figtree. Both fonts are self-hosted from `@fontsource-variable`, so the site never loads fonts from a CDN.
+
+## Styling
+
+- Style components with StyleX (`@stylexjs/stylex`). Do not add inline `style` props or other CSS libraries.
+- Colors and fonts live in `src/ui/tokens.stylex.ts` as `defineVars`. Use the tokens instead of writing hex values in components.
+- `src/ui/kit.tsx` holds the shared pieces: `Page`, `Ribbon`, `Bow`, the `row` styles for lines on the ribbon, and `ui` styles for titles, fields, and buttons.
+- `src/styles.css` holds only the font imports and the page reset.
+- Write borders as longhands (`borderWidth`, `borderStyle`, `borderColor`, `borderBottomWidth`, and so on). StyleX 0.19 drops the `border` and `borderBottom` shorthands without an error.
+
+## How the CSS is built
+
+`@stylexjs/unplugin` runs first in `vite.config.ts`. In a build, it appends every StyleX rule to the `styles.css` asset. In dev, `src/routes/__root.tsx` links `/virtual:stylex.css` and loads `virtual:stylex:runtime`, which reloads the CSS on change.

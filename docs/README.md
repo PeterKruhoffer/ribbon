@@ -5,6 +5,7 @@ Ribbon is a shared gift wish list. The owner shares a link. Guests claim items, 
 - [Architecture](architecture.md): the Workers, the Durable Object, and where code goes.
 - [Live updates](live-updates.md): the WebSocket protocol, spoiler protection, and safe claims.
 - [Development](development.md): commands, local dev, deploy, and checks.
+- [Design](design.md): the Ribbon look and how styling works.
 
 ## Rules
 
@@ -14,4 +15,5 @@ Ribbon is a shared gift wish list. The owner shares a link. Guests claim items, 
 - `alchemy.run.ts` defines all Cloudflare infrastructure. Do not add Wrangler config or `@cloudflare/vite-plugin`.
 - Import Alchemy's Cloudflare resources from `@alchemy.run/cloudflare`. Alchemy 2.0.0-beta.84 removed `alchemy/Cloudflare`.
 - The owner must never receive claim data or claim events. See [Live updates](live-updates.md).
+- Style with StyleX. See [Design](design.md).
 - Never commit secrets.

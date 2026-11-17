@@ -57,5 +57,6 @@ The list id is a random UUID, and the guest share link is `/lists/:listId`. `?as
 | `src/backend`             | Effect Worker and Durable Object                                                           |
 | `src/shared`              | Schemas and tagged errors used by both sides                                               |
 | `src/live`                | WebSocket protocol and browser client                                                      |
+| `src/ui`                  | StyleX tokens and shared UI pieces. See [Design](design.md).                               |
 | `src/routes`              | TanStack Start pages. `routeTree.gen.ts` is generated; do not edit it, but keep it in Git. |
 | `scripts/verify-live.mjs` | End-to-end checks against a running deployment                                             |

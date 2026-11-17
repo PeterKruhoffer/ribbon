@@ -1,0 +1,201 @@
+import * as stylex from "@stylexjs/stylex";
+import type { ReactNode } from "react";
+import { color, font } from "./tokens.stylex.ts";
+
+// Shared pieces of the Ribbon look. The ribbon runs down every list, and a bow
+// ties onto it for each gift that guests have fully claimed.
+
+const MOBILE = "@media (max-width: 480px)";
+const REDUCED = "@media (prefers-reduced-motion: reduce)";
+
+export function Page({ children }: { children: ReactNode }) {
+  return (
+    <main {...stylex.props(s.page)}>
+      <div {...stylex.props(s.sheet)}>
+        <p {...stylex.props(s.brand)}>
+          <Bow size={22} />
+          Ribbon
+        </p>
+        {children}
+      </div>
+    </main>
+  );
+}
+
+export function Ribbon({ children }: { children: ReactNode }) {
+  return (
+    <div {...stylex.props(s.ribbonWrap)}>
+      <span aria-hidden {...stylex.props(s.ribbon)} />
+      {children}
+    </div>
+  );
+}
+
+export function Bow({ size = 38, tied = false }: { size?: number; tied?: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={(size * 28) / 40}
+      viewBox="0 0 40 28"
+      {...stylex.props(tied && s.tied)}
+    >
+      <path d="M20 14C12 1 1 4 4 12s12 6 16 2Z" {...stylex.props(s.loop)} />
+      <path d="M20 14C28 1 39 4 36 12s-12 6-16 2Z" {...stylex.props(s.loop)} />
+      <path d="M19 15 12 27l4-1 4-9Zm2 0 7 12-4-1-4-9Z" {...stylex.props(s.knot)} />
+      <circle cx="20" cy="14" r="3.6" {...stylex.props(s.knot)} />
+    </svg>
+  );
+}
+
+const tie = stylex.keyframes({
+  from: { opacity: 0, transform: "scale(1.5) rotate(-12deg)" },
+  to: { opacity: 1, transform: "none" },
+});
+
+// Rows that sit on the ribbon. The bow column lines up with the ribbon's center.
+export const row = stylex.create({
+  base: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 56,
+    paddingBlock: 8,
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: color.line,
+  },
+  bow: {
+    position: "absolute",
+    left: { default: -58, [MOBILE]: -51 },
+    top: "50%",
+    marginTop: -13,
+    display: "flex",
+  },
+});
+
+export const ui = stylex.create({
+  title: {
+    margin: 0,
+    fontFamily: font.title,
+    fontSize: { default: 40, [MOBILE]: 32 },
+    fontWeight: 500,
+    fontVariationSettings: '"opsz" 72',
+    lineHeight: 1.05,
+    letterSpacing: "-0.015em",
+    textWrap: "balance",
+  },
+  sub: { margin: "10px 0 28px", color: color.soft, maxWidth: "44ch", textWrap: "pretty" },
+  soft: { color: color.soft },
+  small: { fontSize: 14, color: color.soft, margin: 0 },
+  error: { margin: 0, fontSize: 14, color: color.ribbonDark },
+  field: {
+    minWidth: 0,
+    fontWeight: 400,
+    paddingBlock: 9,
+    paddingInline: 14,
+    backgroundColor: color.sheet,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: { default: color.line, ":hover": "#d9cdc6" },
+    borderRadius: 999,
+    outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+    outlineOffset: 1,
+  },
+  button: {
+    flexShrink: 0,
+    paddingBlock: 8,
+    paddingInline: 18,
+    fontSize: 15,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    cursor: { default: "pointer", ":disabled": "default" },
+    color: color.onRibbon,
+    backgroundColor: { default: color.ribbon, ":hover": color.ribbonDark, ":disabled": color.line },
+    borderStyle: "none",
+    borderRadius: 999,
+    transform: { default: null, ":active": "scale(0.97)" },
+    outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+    outlineOffset: 2,
+  },
+  quiet: {
+    color: { default: color.ribbon, ":disabled": color.soft },
+    backgroundColor: { default: "transparent", ":hover": "#f7e9eb", ":disabled": "transparent" },
+    boxShadow: `inset 0 0 0 1px ${color.line}`,
+    fontWeight: 500,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    padding: 0,
+    flexShrink: 0,
+    display: "grid",
+    placeItems: "center",
+    fontSize: 18,
+    lineHeight: 1,
+    cursor: { default: "pointer", ":disabled": "default" },
+    color: { default: color.soft, ":hover": color.ink, ":disabled": color.line },
+    backgroundColor: "transparent",
+    borderStyle: "none",
+    borderRadius: 999,
+    outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+  },
+  link: { color: color.ribbon, textUnderlineOffset: 3 },
+});
+
+const s = stylex.create({
+  page: {
+    minHeight: "100vh",
+    paddingBlock: { default: 48, [MOBILE]: 0 },
+    paddingInline: { default: 20, [MOBILE]: 0 },
+    backgroundColor: color.paper,
+    color: color.ink,
+    fontFamily: font.body,
+  },
+  sheet: {
+    maxWidth: 600,
+    marginInline: "auto",
+    minHeight: { default: null, [MOBILE]: "100vh" },
+    paddingBlock: { default: 36, [MOBILE]: 28 },
+    paddingInline: { default: 40, [MOBILE]: 20 },
+    backgroundColor: color.sheet,
+    borderRadius: { default: 8, [MOBILE]: 0 },
+    boxShadow: { default: `0 0 0 1px ${color.line}`, [MOBILE]: "none" },
+  },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    margin: "0 0 28px",
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  ribbonWrap: {
+    position: "relative",
+    paddingLeft: { default: 60, [MOBILE]: 50 },
+  },
+  ribbon: {
+    position: "absolute",
+    left: { default: 16, [MOBILE]: 13 },
+    top: -10,
+    bottom: -10,
+    width: 10,
+    backgroundColor: color.ribbon,
+  },
+  loop: { fill: color.ribbon },
+  knot: { fill: color.ribbonDark },
+  tied: {
+    animationName: { default: tie, [REDUCED]: "none" },
+    animationDuration: "260ms",
+    animationTimingFunction: "cubic-bezier(0.2, 0.9, 0.3, 1.3)",
+  },
+});
+
+// The Backend answers errors with plain text meant for people. Anything else,
+// such as an HTML 404 page when no Backend is running, gets a generic message.
+export async function readError(response: Response) {
+  return response.headers.get("content-type")?.startsWith("text/plain")
+    ? response.text()
+    : `Ribbon's server didn't answer (${response.status}). Try again in a moment.`;
+}

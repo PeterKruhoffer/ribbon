@@ -1,8 +1,11 @@
+import * as stylex from "@stylexjs/stylex";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
 import type { ListView, Role } from "../shared/wishlist.ts";
+import { Bow, Page, readError, Ribbon, row, ui } from "../ui/kit.tsx";
+import { color } from "../ui/tokens.stylex.ts";
 
 // One list. Guests claim items, and a claim in one guest tab updates the
 // others live; the owner sees the share link and receives no claim events.
@@ -31,6 +34,8 @@ function ListPage() {
   const [events, setEvents] = useState(0);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const [claiming, setClaiming] = useState<string>();
+  const [claimed, setClaimed] = useState<string>();
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/lists/${listId}${query}`);
@@ -61,66 +66,135 @@ function ListPage() {
     return () => live.close();
   }, [itemIds, listId, query, load]);
 
-  const claim = async (itemId: string) => {
+  const claim = async (itemId: string, title: string) => {
     setError(undefined);
+    setClaiming(itemId);
     const response = await fetch(`/api/lists/${listId}/items/${itemId}/claim`, {
       method: "POST",
       body: JSON.stringify({ guest: guestToken() }),
     });
-    if (!response.ok) setError(await response.text());
+    if (response.ok) setClaimed(title);
+    else setError(await readError(response));
     await load();
+    setClaiming(undefined);
   };
 
-  if (!list) return <main style={{ padding: 24 }}>Loading…</main>;
+  if (!list)
+    return (
+      <Page>
+        <p {...stylex.props(ui.small)}>Opening the list…</p>
+      </Page>
+    );
   if (list === "missing")
     return (
-      <main style={{ padding: 24 }}>
-        <h1>List not found</h1>
-        <p>
-          Check the link, or <a href="/">make a new list</a>.
+      <Page>
+        <h1 {...stylex.props(ui.title)}>List not found</h1>
+        <p {...stylex.props(ui.sub)}>
+          Check the link, or{" "}
+          <a href="/" {...stylex.props(ui.link)}>
+            make a new list
+          </a>
+          .
         </p>
-      </main>
+      </Page>
     );
   const shareUrl = `${location.origin}/lists/${listId}`;
+  const owner = role === "owner";
   return (
-    <main style={{ padding: 24, maxWidth: 520 }}>
-      <h1 style={{ marginBottom: 4 }}>{list.title}</h1>
-      <p style={{ color: "#666", marginTop: 0 }}>Viewing as {role}</p>
-      {role === "owner" && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <input readOnly aria-label="Share link" value={shareUrl} style={{ flex: 1 }} data-share />
+    <Page>
+      <h1 {...stylex.props(ui.title)}>{list.title}</h1>
+      <p {...stylex.props(ui.sub)}>
+        {owner
+          ? "Your list. Guests see what is still free, and you never see who claimed what."
+          : "Claim a gift so nobody else buys the same one. The list's owner never sees who claimed what."}
+      </p>
+      {owner && (
+        <div {...stylex.props(s.share)}>
+          <input
+            readOnly
+            aria-label="Share link"
+            value={shareUrl}
+            onFocus={(event) => event.target.select()}
+            {...stylex.props(ui.field, s.shareField)}
+            data-share
+          />
           <button
             onClick={() => void navigator.clipboard.writeText(shareUrl).then(() => setCopied(true))}
+            {...stylex.props(ui.button)}
           >
             {copied ? "Copied" : "Copy share link"}
           </button>
         </div>
       )}
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {list.items.map((item) => (
-          <li
-            key={item.id}
-            data-item={item.id}
-            style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 0" }}
-          >
-            <span style={{ flex: 1 }}>{item.title}</span>
-            {role === "owner" ? (
-              <span style={{ color: "#666" }}>wants {item.quantity}</span>
-            ) : (
-              <>
-                <span data-remaining>{item.remaining} left</span>
-                <button disabled={item.remaining === 0} onClick={() => void claim(item.id)}>
-                  Claim
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      {error && <p style={{ color: "#b00020" }}>{error}</p>}
-      <p style={{ color: "#666" }} data-events>
-        Live events received: {events}
-      </p>
-    </main>
+      <Ribbon>
+        <ul {...stylex.props(s.list)}>
+          {list.items.map((item) => {
+            const taken = item.remaining === 0;
+            return (
+              <li key={item.id} data-item={item.id} {...stylex.props(row.base)}>
+                {!owner && taken && (
+                  <span {...stylex.props(row.bow)}>
+                    <Bow tied />
+                  </span>
+                )}
+                <span {...stylex.props(s.name, taken && ui.soft)}>{item.title}</span>
+                {owner ? (
+                  <span {...stylex.props(s.meta)}>wants {item.quantity}</span>
+                ) : (
+                  <>
+                    <span data-remaining {...stylex.props(s.meta)}>
+                      {item.remaining} of {item.quantity} left
+                    </span>
+                    {taken ? (
+                      <span {...stylex.props(s.taken)}>Taken</span>
+                    ) : (
+                      <button
+                        disabled={claiming !== undefined}
+                        onClick={() => void claim(item.id, item.title)}
+                        {...stylex.props(ui.button)}
+                      >
+                        Claim
+                      </button>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Ribbon>
+      {!owner && (
+        <div {...stylex.props(s.footer)}>
+          {error && (
+            <p role="alert" {...stylex.props(ui.error)}>
+              {error}
+            </p>
+          )}
+          <p aria-live="polite" data-events={events} {...stylex.props(ui.small)}>
+            {claimed
+              ? `You claimed ${claimed}. Other guests see it now.`
+              : "Claims show up for every guest right away."}
+          </p>
+        </div>
+      )}
+    </Page>
   );
 }
+
+const MOBILE = "@media (max-width: 480px)";
+
+const s = stylex.create({
+  share: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 32 },
+  shareField: { flex: "1 1 240px", fontSize: 14 },
+  list: { listStyle: "none", margin: 0, padding: 0 },
+  name: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
+  meta: {
+    fontSize: 14,
+    color: color.soft,
+    fontVariantNumeric: "tabular-nums",
+    whiteSpace: "nowrap",
+    display: { default: null, [MOBILE]: "none" },
+  },
+  taken: { minWidth: 76, fontSize: 15, color: color.soft, textAlign: "center" },
+  footer: { display: "grid", gap: 6, marginTop: 24 },
+});
