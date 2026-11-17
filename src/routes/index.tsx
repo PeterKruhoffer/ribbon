@@ -1,3 +1,4 @@
+import { SignInButton, useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
@@ -12,6 +13,7 @@ const emptyItem = (): Draft => ({ title: "", quantity: 1 });
 
 function Home() {
   const navigate = useNavigate();
+  const { isSignedIn, getToken } = useAuth();
   const [title, setTitle] = useState("");
   const [items, setItems] = useState<Draft[]>([emptyItem()]);
   const [error, setError] = useState<string>();
@@ -28,13 +30,13 @@ function Home() {
     setSaving(true);
     const response = await fetch("/api/lists", {
       method: "POST",
+      headers: { authorization: `Bearer ${await getToken()}` },
       body: JSON.stringify({ title, items: wishes }),
     });
     setSaving(false);
     if (!response.ok) return setError(await readError(response));
     const { listId } = (await response.json()) as { listId: string };
-    // ?as=owner stands in for real sign-in until owners have accounts.
-    await navigate({ to: "/lists/$listId", params: { listId }, search: { as: "owner" } });
+    await navigate({ to: "/lists/$listId", params: { listId } });
   };
 
   return (
@@ -107,7 +109,10 @@ function Home() {
         <h2 id="make-title" {...stylex.props(s.heading)}>
           Make a wish list
         </h2>
-        <p {...stylex.props(ui.sub)}>Name the list, add the wishes, and share the link.</p>
+        <p {...stylex.props(ui.sub)}>
+          Name the list, add the wishes, and share the link. You sign in to make a list, so only you
+          open it as the owner. Guests need no account.
+        </p>
         <form onSubmit={(event) => void create(event)} {...stylex.props(s.form)}>
           <label {...stylex.props(s.label)}>
             List name
@@ -169,9 +174,22 @@ function Home() {
             </Ribbon>
           </fieldset>
           <div {...stylex.props(s.submit)}>
-            <button type="submit" disabled={saving} {...stylex.props(ui.button)}>
-              {saving ? "Creating…" : "Create list"}
-            </button>
+            {/* The modal keeps the page, so the drafted wishes survive sign-in. */}
+            {isSignedIn === false ? (
+              <SignInButton mode="modal">
+                <button type="button" {...stylex.props(ui.button)}>
+                  Sign in to create the list
+                </button>
+              </SignInButton>
+            ) : (
+              <button
+                type="submit"
+                disabled={saving || isSignedIn === undefined}
+                {...stylex.props(ui.button)}
+              >
+                {saving ? "Creating…" : "Create list"}
+              </button>
+            )}
             {error && (
               <p role="alert" {...stylex.props(ui.error)}>
                 {error}

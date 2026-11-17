@@ -1,6 +1,12 @@
 // Verifies the live wish list against a deployed worker.
-// Usage: pnpm verify:live <base-url>
+// Usage: RIBBON_OWNER_TOKEN=<token> pnpm verify:live <base-url>
+// The token is a Clerk session token for any user. Sign in on the site and run
+// `await Clerk.session.getToken()` in the browser console. It lasts 60 s, so
+// start the script right away; it uses the token in the first seconds.
 const base = process.argv[2];
+const token = process.env.RIBBON_OWNER_TOKEN;
+if (!token) throw new Error("Set RIBBON_OWNER_TOKEN to a Clerk session token");
+const asOwner = { authorization: `Bearer ${token}` };
 const topic = (id) => `entity:Item:${id}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -25,12 +31,23 @@ const connect = (url) =>
     socket.addEventListener("error", reject);
   });
 
-const claim = (item, guest = "guest-a", query = "") =>
-  fetch(`${api}/items/${item}/claim${query}`, { method: "POST", body: JSON.stringify({ guest }) });
+const claim = (item, guest = "guest-a", headers = {}) =>
+  fetch(`${api}/items/${item}/claim`, { method: "POST", headers, body: JSON.stringify({ guest }) });
 
-// 0. Create a list. Invalid bodies are refused, and unknown lists are 404.
+// 0. Create a list. Only signed-in users create lists, invalid bodies are
+// refused, and unknown lists are 404.
+const newList = JSON.stringify({ title: "Anonymous", items: [{ title: "Socks", quantity: 1 }] });
+const anonymous = await fetch(`${base}/api/lists`, { method: "POST", body: newList });
+check("create without sign-in is 401", anonymous.status === 401, `status ${anonymous.status}`);
+const forged = await fetch(`${base}/api/lists`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${token.slice(0, -4)}AAAA` },
+  body: newList,
+});
+check("create with a forged token is 401", forged.status === 401, `status ${forged.status}`);
 const bad = await fetch(`${base}/api/lists`, {
   method: "POST",
+  headers: asOwner,
   body: JSON.stringify({ title: "  ", items: [] }),
 });
 check("invalid list is 400", bad.status === 400, `status ${bad.status}`);
@@ -38,6 +55,7 @@ const unknown = await fetch(`${base}/api/lists/${crypto.randomUUID()}`);
 check("unknown list is 404", unknown.status === 404, `status ${unknown.status}`);
 const created = await fetch(`${base}/api/lists`, {
   method: "POST",
+  headers: asOwner,
   body: JSON.stringify({
     title: " Verify list ",
     items: [
@@ -55,13 +73,14 @@ const initial = await (await fetch(api)).json();
 check(
   "new list has its title and items in order",
   initial.title === "Verify list" &&
+    initial.role === "guest" &&
     initial.items.map((i) => `${i.title}:${i.quantity}:${i.remaining}`).join("|") ===
       "LEGO Botanical bonsai tree:1:1|Wingspan board game:1:1|Wool socks:5:5",
   JSON.stringify(initial),
 );
 const [lego, wingspan, socks] = initial.items.map((i) => i.id);
 const guestB = await connect(ws());
-const owner = await connect(ws("?as=owner"));
+const owner = await connect(ws(`?token=${encodeURIComponent(token)}`));
 for (const c of [guestB, owner]) {
   c.subscribe("s-socks", topic(socks));
   c.subscribe("s-lego", topic(lego));
@@ -102,14 +121,16 @@ check(
 );
 const guestView = await (await fetch(api)).json();
 check("lego shows 0 left", guestView.items.find((i) => i.id === lego).remaining === 0);
-const ownerView = await (await fetch(`${api}?as=owner`)).json();
+const ownerView = await (await fetch(api, { headers: asOwner })).json();
 check(
   "owner view has no remaining counts",
-  ownerView.items.every((i) => !("remaining" in i)),
+  ownerView.role === "owner" && ownerView.items.every((i) => !("remaining" in i)),
 );
+const oldLink = await (await fetch(`${api}?as=owner`)).json();
+check("?as=owner without a token is a guest", oldLink.role === "guest");
 
 // 3. The owner cannot claim.
-check("owner claim is refused", (await claim(socks, "owner", "?as=owner")).status === 403);
+check("owner claim is refused", (await claim(socks, "owner", asOwner)).status === 403);
 
 // 4. Claiming a missing item is a 404, also on a list that doesn't exist.
 const fresh = `${base}/api/lists/${crypto.randomUUID()}/items/missing/claim`;

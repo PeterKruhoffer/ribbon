@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { Show, SignInButton, UserButton } from "@clerk/react";
 import type { ReactNode } from "react";
 import { color, font } from "./tokens.stylex.ts";
 
@@ -12,10 +13,20 @@ export function Page({ children }: { children: ReactNode }) {
   return (
     <main {...stylex.props(s.page)}>
       <div {...stylex.props(s.sheet)}>
-        <p {...stylex.props(s.brand)}>
-          <Bow size={22} />
-          Ribbon
-        </p>
+        <header {...stylex.props(s.header)}>
+          <a href="/" {...stylex.props(s.brand)}>
+            <Bow size={22} />
+            Ribbon
+          </a>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button {...stylex.props(ui.button, ui.quiet, s.signIn)}>Sign in</button>
+            </SignInButton>
+          </Show>
+        </header>
         {children}
       </div>
     </main>
@@ -163,14 +174,24 @@ const s = stylex.create({
     borderRadius: { default: 8, [MOBILE]: 0 },
     boxShadow: { default: `0 0 0 1px ${color.line}`, [MOBILE]: "none" },
   },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    minHeight: 32,
+    marginBottom: 28,
+  },
   brand: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    margin: "0 0 28px",
     fontSize: 15,
     fontWeight: 600,
+    color: "inherit",
+    textDecoration: "none",
   },
+  signIn: { paddingBlock: 5, paddingInline: 14, fontSize: 14 },
   ribbonWrap: {
     position: "relative",
     paddingLeft: { default: 60, [MOBILE]: 50 },

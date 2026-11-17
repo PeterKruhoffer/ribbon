@@ -13,7 +13,12 @@ export const Item = Schema.Struct({
   remaining: Schema.optional(Schema.Number),
 });
 
-export const ListView = Schema.Struct({ title: Schema.String, items: Schema.Array(Item) });
+// role is "owner" only for the signed-in user who created the list.
+export const ListView = Schema.Struct({
+  title: Schema.String,
+  role: Role,
+  items: Schema.Array(Item),
+});
 export type ListView = typeof ListView.Type;
 
 const Text = (maxLength: number) =>
@@ -38,6 +43,14 @@ export class ListNotFound extends Schema.TaggedError<ListNotFound>()("ListNotFou
 export class ItemNotFound extends Schema.TaggedError<ItemNotFound>()("ItemNotFound", {
   itemId: Schema.String,
 }) {}
+
+export class OwnerCannotClaim extends Schema.TaggedError<OwnerCannotClaim>()(
+  "OwnerCannotClaim",
+  {},
+) {}
+
+// The request carried a Clerk session token that failed verification.
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
 
 export class FullyClaimed extends Schema.TaggedError<FullyClaimed>()("FullyClaimed", {
   itemId: Schema.String,

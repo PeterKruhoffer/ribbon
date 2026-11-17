@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/http";
+import { viewerHeader } from "./auth.ts";
 import { ClientMessage, entityTopic, type LiveEvent } from "../live/protocol.ts";
 import {
   FullyClaimed,
@@ -8,6 +9,7 @@ import {
   ListNotFound,
   type ListView,
   type NewList,
+  OwnerCannotClaim,
   Role,
 } from "../shared/wishlist.ts";
 
@@ -63,12 +65,23 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
         }
       });
 
+      // The owner is the Clerk user who created the list. Anyone else, signed in
+      // or not, is a guest. Lists made before sign-in have no owner.
+      const roleOf = Effect.fn("Wishlist.roleOf")(function* (viewer: string | undefined) {
+        if (viewer === undefined) return "guest" as Role;
+        const [owner] = yield* (yield* sql.exec<{ value: string }>(
+          "SELECT value FROM meta WHERE key = 'owner'",
+        )).toArray();
+        return (owner?.value === viewer ? "owner" : "guest") as Role;
+      });
+
       return {
         // The Backend picks a fresh random id for each new list, so this object
         // starts empty. Item ids are random too, so they never repeat within a
         // list once items can be removed.
-        create: Effect.fn("Wishlist.create")(function* (list: NewList) {
+        create: Effect.fn("Wishlist.create")(function* (list: NewList, owner: string) {
           yield* sql.exec("INSERT INTO meta VALUES ('title', ?)", list.title);
+          yield* sql.exec("INSERT INTO meta VALUES ('owner', ?)", owner);
           for (const [position, item] of list.items.entries()) {
             yield* sql.exec(
               "INSERT INTO item VALUES (?, ?, ?, ?)",
@@ -80,11 +93,12 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           }
         }),
 
-        read: Effect.fn("Wishlist.read")(function* (listId: string, role: Role) {
+        read: Effect.fn("Wishlist.read")(function* (listId: string, viewer: string | undefined) {
           const [meta] = yield* (yield* sql.exec<{ value: string }>(
             "SELECT value FROM meta WHERE key = 'title'",
           )).toArray();
           if (!meta) return yield* new ListNotFound({ listId });
+          const role = yield* roleOf(viewer);
           const rows = yield* (yield* sql.exec<{
             id: string;
             title: string;
@@ -95,6 +109,7 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           )).toArray();
           const view: ListView = {
             title: meta.value,
+            role,
             items: rows.map(({ id, title, quantity, claimed }) =>
               role === "owner"
                 ? { id, title, quantity }
@@ -107,7 +122,12 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
         // One conditional INSERT checks and claims in a single statement, so two
         // guests racing for the last item cannot both win, even if the fibers
         // handling their requests interleave.
-        claim: Effect.fn("Wishlist.claim")(function* (itemId: string, guest: string) {
+        claim: Effect.fn("Wishlist.claim")(function* (
+          itemId: string,
+          guest: string,
+          viewer: string | undefined,
+        ) {
+          if ((yield* roleOf(viewer)) === "owner") return yield* new OwnerCannotClaim();
           // RETURNING makes the inserted row the result, which is reliable where
           // the cursor's rowsWritten counter is not.
           const inserted = yield* (yield* sql.exec(
@@ -136,14 +156,11 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           return { remaining: row!.remaining };
         }),
 
-        // WebSocket upgrades for /api/lists/:id/live. ?as=owner stands in for
-        // real authentication until owners can sign in.
+        // WebSocket upgrades for /api/lists/:id/live. The Backend verified the
+        // Clerk token and put the viewer's user id in viewerHeader.
         fetch: Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
-          const role: Role =
-            new URL(request.url, "http://ribbon").searchParams.get("as") === "owner"
-              ? "owner"
-              : "guest";
+          const role = yield* roleOf(request.headers[viewerHeader] || undefined);
           const [response, socket] = yield* Cloudflare.upgrade();
           yield* socket.setAttachment(Attachment, { role, subscriptions: {} }).pipe(Effect.orDie);
           return response;

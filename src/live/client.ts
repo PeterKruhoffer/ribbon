@@ -17,8 +17,10 @@ export type LiveClient = {
   close(): void;
 };
 
+// url is called before every connection attempt, so each one can carry a fresh
+// session token.
 export function connectLive(
-  url: string,
+  url: () => Promise<string>,
   options: { retryDelay?: number; onReconnect?: () => void } = {},
 ): LiveClient {
   const subscriptions = new Map<string, Subscription>();
@@ -30,8 +32,10 @@ export function connectLive(
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   };
 
-  const open = () => {
-    socket = new WebSocket(url);
+  const open = async () => {
+    const next = await url();
+    if (closed) return;
+    socket = new WebSocket(next);
     socket.addEventListener("open", () => {
       for (const [id, { topic }] of subscriptions) send({ op: "subscribe", id, topic });
       if (connectedBefore) options.onReconnect?.();
@@ -42,10 +46,10 @@ export function connectLive(
       subscriptions.get(event.subscriptionId)?.onEvent(event);
     });
     socket.addEventListener("close", () => {
-      if (!closed) setTimeout(open, options.retryDelay ?? 1000);
+      if (!closed) setTimeout(() => void open(), options.retryDelay ?? 1000);
     });
   };
-  open();
+  void open();
 
   return {
     async subscribe({ id, topic, onEvent }) {

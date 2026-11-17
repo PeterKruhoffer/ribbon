@@ -1,4 +1,5 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { ClerkProvider } from "@clerk/react";
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouter } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 
 // In a build, the StyleX plugin appends every StyleX rule to styles.css. In dev
@@ -23,13 +24,25 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  const router = useRouter();
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <Outlet />
+        {/* Clerk runs in the browser only. The Backend verifies its session
+            tokens, so the pages need no server-side Clerk middleware. Clerk
+            navigates through the router after sign-in, so the page and a
+            drafted list stay put instead of reloading. */}
+        <ClerkProvider
+          publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
+          routerPush={(href) => router.navigate({ href })}
+          routerReplace={(href) => router.navigate({ href, replace: true })}
+          appearance={{ variables: { colorPrimary: "#b0243a" } }}
+        >
+          <Outlet />
+        </ClerkProvider>
         <Scripts />
       </body>
     </html>

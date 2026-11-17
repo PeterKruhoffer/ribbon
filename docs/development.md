@@ -18,11 +18,13 @@
 | `pnpm build`                        | Vite build of the website.                                                            |
 | `pnpm format`                       | Format with Oxfmt.                                                                    |
 | `pnpm run deploy --stage dev --yes` | Deploy with Alchemy. Plain `pnpm deploy` is a pnpm built-in.                          |
-| `pnpm verify:live <url>`            | End-to-end checks against a deployment.                                               |
+| `pnpm verify:live <url>`            | End-to-end checks against a deployment. Needs `RIBBON_OWNER_TOKEN`; see below.        |
 
 Run `pnpm check` and `pnpm build` after every change.
 
 ## Local dev
+
+Copy `.env.example` to `.env`. It holds the two Clerk values for the development instance; both are public. Vite reads `VITE_CLERK_PUBLISHABLE_KEY` into the browser bundle, and Alchemy binds `CLERK_JWT_KEY` to the Backend. In orbs, the Amp project sets both as environment variables. See [Auth](auth.md).
 
 `alchemy dev` runs both Workers and the Durable Object in local workerd. It still needs Cloudflare credentials (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`), because Alchemy keeps its state store on Cloudflare.
 
@@ -35,9 +37,11 @@ Keep the compatibility date in `alchemy.run.ts` at or below what the local worke
 Deploying to verify work is allowed.
 
 1. `pnpm run deploy --stage dev --yes` prints `url` and `backendUrl`.
-2. `pnpm verify:live <url>` checks list creation, live delivery, the owner getting no events, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
+2. Sign in on `<url>`, run `await Clerk.session.getToken()` in the browser console, and within a minute run `RIBBON_OWNER_TOKEN=<token> pnpm verify:live <url>`. It checks sign-in for list creation, live delivery, the owner getting no events, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
 
-Demo: create a list at `<url>`. It opens the owner view; open its share link in two more tabs as guests.
+Demo: sign in and create a list at `<url>`. It opens the owner view; open its share link in two private windows as guests.
+
+Clerk test emails such as `owner+clerk_test@example.com` sign in with code `424242` and send no email.
 
 ## Orbs
 

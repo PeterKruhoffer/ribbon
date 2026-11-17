@@ -38,12 +38,12 @@ Server to browser:
 }
 ```
 
-`src/live/client.ts` is the browser side. It has the same shape as fate's live connector (`subscribe` returns an unsubscribe function, plus `close`), so fate can use it later. After a reconnect it subscribes again. It does not replay missed events, so the page refetches on reconnect.
+`src/live/client.ts` is the browser side. It has the same shape as fate's live connector (`subscribe` returns an unsubscribe function, plus `close`), so fate can use it later. It asks for a fresh URL, with a fresh session token, before each connection. After a reconnect it subscribes again. It does not replay missed events, so the page refetches on reconnect.
 
 ## Spoiler protection
 
 - The owner view has no `remaining` counts.
-- Each socket stores its role in its attachment. Claim events go to guest sockets only. A "something changed" event would already spoil the gift.
+- The socket's role comes from the Clerk token in `?token=`, which the Backend verifies and passes on to the object. Each socket stores its role in its attachment. Claim events go to guest sockets only. A "something changed" event would already spoil the gift.
 - The owner cannot claim.
 
 ## Safe claims

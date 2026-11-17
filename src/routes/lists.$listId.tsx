@@ -1,22 +1,20 @@
+import { useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
-import type { ListView, Role } from "../shared/wishlist.ts";
+import type { ListView } from "../shared/wishlist.ts";
 import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Bow, Page, readError, Ribbon, row, ui } from "../ui/kit.tsx";
 import { color } from "../ui/tokens.stylex.ts";
 
 // One list. Guests claim items, and a claim in one guest tab updates the
 // others live; the owner sees the share link and receives no claim events.
-// ?as=owner stands in for real authentication.
+// The Backend decides the role: the signed-in user who created the list is
+// the owner, and everyone else with the link is a guest.
 
-export const Route = createFileRoute("/lists/$listId")({
-  validateSearch: (search: Record<string, unknown>): { as?: "owner" } =>
-    search.as === "owner" ? { as: "owner" } : {},
-  component: ListPage,
-});
+export const Route = createFileRoute("/lists/$listId")({ component: ListPage });
 
 function guestToken() {
   let token = localStorage.getItem("ribbon-guest");
@@ -29,8 +27,9 @@ function guestToken() {
 
 function ListPage() {
   const { listId } = Route.useParams();
-  const role: Role = Route.useSearch().as === "owner" ? "owner" : "guest";
-  const query = role === "owner" ? "?as=owner" : "";
+  // Wait for Clerk before the first fetch. Fetching signed out would show the
+  // owner the guest view, claims included.
+  const { isLoaded, userId, getToken } = useAuth();
   const [list, setList] = useState<ListView | "missing">();
   const [events, setEvents] = useState(0);
   const [error, setError] = useState<string>();
@@ -39,22 +38,36 @@ function ListPage() {
   // Each claim gets a new id, so its figure remounts and its animation plays again.
   const [claimed, setClaimed] = useState<{ id: number; title: string }>();
 
+  const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { authorization: `Bearer ${token}` } : {};
+  }, [getToken]);
+
+  // userId is a dependency so signing in or out reloads the list in its new role.
   const load = useCallback(async () => {
-    const response = await fetch(`/api/lists/${listId}${query}`);
-    setList(response.status === 404 ? "missing" : ((await response.json()) as ListView));
-  }, [listId, query]);
+    if (!isLoaded) return;
+    const response = await fetch(`/api/lists/${listId}`, { headers: await authHeaders() });
+    if (response.ok || response.status === 404)
+      setList(response.status === 404 ? "missing" : ((await response.json()) as ListView));
+    else setError(await readError(response));
+  }, [isLoaded, userId, listId, authHeaders]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const itemIds = list === "missing" ? undefined : list?.items.map((item) => item.id).join(",");
+  const role = list === "missing" ? undefined : list?.role;
   useEffect(() => {
     if (!itemIds) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const live = connectLive(`${protocol}//${location.host}/api/lists/${listId}/live${query}`, {
-      onReconnect: () => void load(),
-    });
+    // Session tokens last a minute, so each reconnect asks Clerk for a fresh one.
+    const url = async () => {
+      const token = await getToken();
+      const query = token ? `?token=${encodeURIComponent(token)}` : "";
+      return `${protocol}//${location.host}/api/lists/${listId}/live${query}`;
+    };
+    const live = connectLive(url, { onReconnect: () => void load() });
     for (const id of itemIds.split(",")) {
       void live.subscribe({
         id,
@@ -66,13 +79,14 @@ function ListPage() {
       });
     }
     return () => live.close();
-  }, [itemIds, listId, query, load]);
+  }, [itemIds, role, listId, getToken, load]);
 
   const claim = async (itemId: string, title: string) => {
     setError(undefined);
     setClaiming(itemId);
     const response = await fetch(`/api/lists/${listId}/items/${itemId}/claim`, {
       method: "POST",
+      headers: await authHeaders(),
       body: JSON.stringify({ guest: guestToken() }),
     });
     if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title }));
@@ -103,7 +117,7 @@ function ListPage() {
       </Page>
     );
   const shareUrl = `${location.origin}/lists/${listId}`;
-  const owner = role === "owner";
+  const owner = list.role === "owner";
   return (
     <Page>
       <h1 {...stylex.props(ui.title)}>{list.title}</h1>

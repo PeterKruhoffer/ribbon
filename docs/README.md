@@ -1,11 +1,12 @@
 # Ribbon docs
 
-Ribbon is a shared gift wish list. The owner shares a link. Guests claim items, and every guest sees claims live. The owner never sees who claimed what.
+Ribbon is a shared gift wish list. The owner signs in with Clerk, makes a list, and shares its link. Anyone with the link claims items without an account, and every guest sees claims live. The owner never sees who claimed what.
 
 - [Architecture](architecture.md): the Workers, the Durable Object, and where code goes.
 - [Live updates](live-updates.md): the WebSocket protocol, spoiler protection, and safe claims.
 - [Development](development.md): commands, local dev, deploy, and checks.
 - [Design](design.md): the Ribbon look and how styling works.
+- [Auth](auth.md): Clerk sign-in, owners, and guests.
 
 ## Rules
 
@@ -17,3 +18,4 @@ Ribbon is a shared gift wish list. The owner shares a link. Guests claim items, 
 - The owner must never receive claim data or claim events. See [Live updates](live-updates.md).
 - Style with StyleX. See [Design](design.md).
 - Never commit secrets.
+- The Backend decides who owns a list from a verified Clerk token. Never trust a role the browser sends. See [Auth](auth.md).
