@@ -15,3 +15,5 @@ Titles use Literata and everything else uses Figtree. Both fonts are self-hosted
 ## How the CSS is built
 
 `@stylexjs/unplugin` runs first in `vite.config.ts`. In a build, it appends every StyleX rule to the `styles.css` asset. In dev, `src/routes/__root.tsx` links `/virtual:stylex.css` and loads `virtual:stylex:runtime`, which reloads the CSS on change.
+
+StyleX re-emits `styles.css` under a new hash but leaves the old name in the chunks' `importedAssets`, which Alchemy copies at deploy. The `ribbon:stylex-asset-names` plugin in `vite.config.ts` points those entries at the renamed file. Without it, `pnpm run deploy` fails with a missing `styles-*.css`.
