@@ -19,6 +19,7 @@
 | `pnpm format`                       | Format with Oxfmt.                                                                    |
 | `pnpm run deploy --stage dev --yes` | Deploy with Alchemy. Plain `pnpm deploy` is a pnpm built-in.                          |
 | `pnpm verify:live <url>`            | End-to-end checks against a deployment. Needs `RIBBON_OWNER_TOKEN`; see below.        |
+| `node scripts/owner-token.mjs`      | Prints an owner token for `verify:live`. Needs `CLERK_SECRET_KEY`; see below.         |
 
 Run `pnpm check` and `pnpm build` after every change.
 
@@ -42,6 +43,22 @@ Deploying to verify work is allowed.
 Demo: sign in and create a list at `<url>`. It opens the owner view; open its share link in two private windows as guests.
 
 Clerk test emails such as `owner+clerk_test@example.com` sign in with code `424242` and send no email.
+
+## Deploy from CI
+
+`.github/workflows/deploy.yml` deploys every push to `main` to the `prod` stage, one run at a time. Threads deploy to `dev` and other stages, so they never overwrite `prod`. The workflow runs `pnpm check` and `pnpm build`, deploys, reads the URL from Alchemy state (`alchemy state cat Ribbon/prod/output`), and runs `pnpm verify:live` against it. The run's summary and the GitHub `prod` environment show the URL.
+
+Alchemy's state lives in the account's Cloudflare state store, so CI and local deploys share it with no extra setup. The workflow copies `.env.example` to `.env` for the public Clerk values.
+
+Repository secrets, under Settings, Secrets and variables, Actions:
+
+| Secret                  | Value                                                                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | A Cloudflare API token that can deploy Workers, edit R2, and read the account's Secrets Store.     |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account id.                                                                         |
+| `CLERK_SECRET_KEY`      | The Clerk development instance's secret key (`sk_test_...`). Without it, `verify:live` is skipped. |
+
+`scripts/owner-token.mjs` uses the secret key to sign in the test user `ci+clerk_test@example.com` and prints a session token for `verify:live`. Clerk only allows this on development instances. Each run leaves one verify list in `prod`.
 
 ## Orbs
 

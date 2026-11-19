@@ -1,0 +1,58 @@
+# Deploys main to the `prod` stage on every push, then checks it end to end.
+# See docs/development.md, "Deploy from CI".
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time. A newer push waits instead of cancelling a deploy halfway.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: prod
+      url: ${{ steps.url.outputs.url }}
+    env:
+      ALCHEMY_STAGE: prod
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The Clerk development instance's keys are public and live in .env.example.
+      # Vite and Alchemy both read .env.
+      - run: cp .env.example .env
+      - run: pnpm check
+      # Build before deploying, so a broken build fails before anything changes.
+      - run: pnpm build
+      - run: pnpm run deploy --yes --no-input
+      - id: url
+        run: |
+          url=$(pnpm exec alchemy state cat "Ribbon/$ALCHEMY_STAGE/output" --no-input --log-level error 2>/dev/null \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s.slice(s.indexOf("{"))).url))')
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url" >> "$GITHUB_STEP_SUMMARY"
+      - name: verify:live
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+        run: |
+          if [ -z "$CLERK_SECRET_KEY" ]; then
+            echo "::warning::CLERK_SECRET_KEY is not set, so verify:live was skipped"
+            exit 0
+          fi
+          RIBBON_OWNER_TOKEN=$(node scripts/owner-token.mjs) pnpm verify:live "${{ steps.url.outputs.url }}"
