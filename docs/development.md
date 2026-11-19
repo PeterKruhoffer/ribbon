@@ -37,7 +37,7 @@ Keep the compatibility date in `alchemy.run.ts` at or below what the local worke
 Deploying to verify work is allowed.
 
 1. `pnpm run deploy --stage dev --yes` prints `url` and `backendUrl`.
-2. Sign in on `<url>`, run `await Clerk.session.getToken()` in the browser console, and within a minute run `RIBBON_OWNER_TOKEN=<token> pnpm verify:live <url>`. It checks sign-in for list creation, live delivery, the owner getting no events, owner edits, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
+2. Sign in on `<url>`, run `await Clerk.session.getToken()` in the browser console, and within a minute run `RIBBON_OWNER_TOKEN=<token> pnpm verify:live <url>`. It checks sign-in for list creation, photo upload and read-back, live delivery, the owner getting no events, owner edits, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
 
 Demo: sign in and create a list at `<url>`. It opens the owner view; open its share link in two private windows as guests.
 

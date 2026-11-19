@@ -3,6 +3,7 @@ import { Config, Effect, Schema } from "effect";
 import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { ListEdit, NewList } from "../shared/wishlist.ts";
 import { viewerHeader, viewerOf } from "./auth.ts";
+import { makePhotos } from "./photos.ts";
 import Wishlist from "./wishlist.ts";
 
 // The Effect Worker behind /api. It hosts the Wishlist Durable Object and
@@ -10,11 +11,12 @@ import Wishlist from "./wishlist.ts";
 // /api/* here through a service binding, so the browser sees one origin.
 
 const listPath = /^\/api\/lists\/([\w-]{1,64})(?:\/(.*))?$/;
+const photoRoute = /^\/api\/photos\/([0-9a-f-]{36})$/;
 const ClaimBody = Schema.Struct({ guest: Schema.String.check(Schema.isMaxLength(64)) });
 
 const invalidList = () =>
   HttpServerResponse.text(
-    "Check the list: 1 to 50 wishes, each with a name, up to 5 links and a photo link starting with https://, and a note of up to 500 characters",
+    "Check the list: 1 to 50 wishes, each with a name, up to 5 links starting with https://, a photo link or upload, and a note of up to 500 characters",
     { status: 400 },
   );
 
@@ -30,6 +32,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
   },
   Effect.gen(function* () {
     const lists = yield* Wishlist;
+    const photos = yield* makePhotos;
     // The Clerk instance's PEM public key. It is public, but Alchemy binds every
     // Config value as a secret.
     const jwtKey = yield* Config.String("CLERK_JWT_KEY");
@@ -61,6 +64,16 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
               Effect.catchTag("SchemaError", () => Effect.succeed(invalidList())),
             );
           }
+          // Owners upload a wish's photo before saving the list; anyone with
+          // the list loads it.
+          if (url.pathname === "/api/photos" && request.method === "POST") {
+            if (viewer === undefined)
+              return HttpServerResponse.text("Sign in to upload a photo", { status: 401 });
+            return yield* photos.upload(viewer);
+          }
+          const photo = photoRoute.exec(url.pathname);
+          if (photo && request.method === "GET") return yield* photos.serve(photo[1]!);
+
           const match = listPath.exec(url.pathname);
           if (!match) return HttpServerResponse.text("Not found", { status: 404 });
           const listId = match[1]!;
@@ -132,5 +145,5 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
         }).pipe(Effect.catchTag("Unauthorized", unauthorized));
       }),
     };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

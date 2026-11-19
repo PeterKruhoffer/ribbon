@@ -9,7 +9,8 @@ export const Item = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   quantity: Schema.Number,
-  // An image link, shop links, and a note from the owner. All optional.
+  // A photo (a link, or an uploaded photo's /api/photos/ path), shop links,
+  // and a note from the owner. All optional.
   photo: Schema.optional(Schema.String),
   links: Schema.Array(Schema.String),
   note: Schema.optional(Schema.String),
@@ -34,10 +35,17 @@ const Url = Schema.Trim.check(
   Schema.isPattern(/^https?:\/\/[^\s/?#]+\S*$/i),
 );
 
+// Uploaded photos live at photoPath + a UUID on Ribbon's own origin.
+export const photoPath = "/api/photos/";
+const Photo = Schema.Trim.check(
+  Schema.isMaxLength(2000),
+  Schema.isPattern(/^(?:https?:\/\/[^\s/?#]+\S*|\/api\/photos\/[0-9a-f-]{36})$/i),
+);
+
 const wish = {
   title: Text(200),
   quantity: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99 })),
-  photo: Schema.optionalKey(Url),
+  photo: Schema.optionalKey(Photo),
   links: Schema.optionalKey(Schema.Array(Url).check(Schema.isMaxLength(5))),
   note: Schema.optionalKey(Text(500)),
 };

@@ -53,13 +53,38 @@ const bad = await fetch(`${base}/api/lists`, {
 check("invalid list is 400", bad.status === 400, `status ${bad.status}`);
 const unknown = await fetch(`${base}/api/lists/${crypto.randomUUID()}`);
 check("unknown list is 404", unknown.status === 404, `status ${unknown.status}`);
+
+// Photos: only signed-in users upload, only images are kept, and anyone reads
+// them back. A 1×1 PNG.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+  "base64",
+);
+const upload = (body, headers = asOwner) =>
+  fetch(`${base}/api/photos`, { method: "POST", headers, body });
+const anonymousPhoto = await upload(png, {});
+check("upload without sign-in is 401", anonymousPhoto.status === 401);
+const svg = await upload("<svg xmlns='http://www.w3.org/2000/svg'/>");
+check("non-image upload is 415", svg.status === 415, `status ${svg.status}`);
+const uploaded = await upload(png);
+check("upload is 201", uploaded.status === 201, `status ${uploaded.status}`);
+const { photo } = await uploaded.json();
+const served = await fetch(`${base}${photo}`);
+check(
+  "photo reads back signed out, as PNG, byte for byte",
+  served.status === 200 &&
+    served.headers.get("content-type") === "image/png" &&
+    Buffer.from(await served.arrayBuffer()).equals(png),
+  `status ${served.status}, ${served.headers.get("content-type")}`,
+);
+
 const created = await fetch(`${base}/api/lists`, {
   method: "POST",
   headers: asOwner,
   body: JSON.stringify({
     title: " Verify list ",
     items: [
-      { title: "LEGO Botanical bonsai tree", quantity: 1 },
+      { title: "LEGO Botanical bonsai tree", quantity: 1, photo },
       { title: "Wingspan board game", quantity: 1 },
       { title: "Wool socks", quantity: 5 },
     ],
@@ -74,6 +99,7 @@ check(
   "new list has its title and items in order",
   initial.title === "Verify list" &&
     initial.role === "guest" &&
+    initial.items[0].photo === photo &&
     initial.items.map((i) => `${i.title}:${i.quantity}:${i.remaining}`).join("|") ===
       "LEGO Botanical bonsai tree:1:1|Wingspan board game:1:1|Wool socks:5:5",
   JSON.stringify(initial),
@@ -157,7 +183,7 @@ const kept = {
   items: [
     { id: lego, title: "LEGO Botanical bonsai tree", quantity: 1 },
     { id: wingspan, title: "Wingspan board game", quantity: 1 },
-    { id: socks, title: "Merino socks", quantity: 6, note: "Size 43" },
+    { id: socks, title: "Merino socks", quantity: 6, note: "Size 43", photo },
   ],
 };
 check("signed-out edit is 401", (await edit(kept, {})).status === 401);
@@ -171,9 +197,10 @@ check("owner edit is 204", edited.status === 204, `status ${edited.status}`);
 const afterEdit = await (await fetch(api)).json();
 const editedSocks = afterEdit.items.find((i) => i.id === socks);
 check(
-  "edit keeps claims",
+  "edit keeps claims and takes an uploaded photo",
   afterEdit.title === "Verify list, edited" &&
     editedSocks.title === "Merino socks" &&
+    editedSocks.photo === photo &&
     editedSocks.remaining === 4,
   JSON.stringify(editedSocks),
 );

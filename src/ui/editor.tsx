@@ -1,19 +1,23 @@
+import { useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { type FormEvent, useState } from "react";
-import type { ListEdit, ListView } from "../shared/wishlist.ts";
-import { Ribbon, row, ui } from "./kit.tsx";
+import { type ListEdit, type ListView, photoPath } from "../shared/wishlist.ts";
+import { readError, Ribbon, row, ui } from "./kit.tsx";
 import { color, figure } from "./tokens.stylex.ts";
 
 // The list form, used to make a list on /new and to edit one on its own page.
 // A wish loaded from a saved list keeps its id, so saving keeps its claims.
 
 // photo and note are undefined until the owner adds them, so their fields stay hidden.
+// photo is a link or, once an upload finishes, the uploaded photo's path.
 type Draft = {
+  // Stable while wishes above are removed, so a finished upload finds its wish.
   key: string;
   id?: string;
   title: string;
   quantity: number;
   photo?: string;
+  uploading?: boolean;
   links: string[];
   note?: string;
 };
@@ -22,6 +26,28 @@ const maxLinks = 5;
 // The Backend accepts only http(s) links; the browser checks the same before sending.
 // Browsers compile pattern with the v flag, which needs "/" escaped inside [].
 const urlPattern = "https?://[^\\s\\/?#]+\\S*";
+const uploaded = (photo: string) => photo.startsWith(photoPath);
+
+// Phone photos run to several MB. Redrawing one as a 1600 px JPEG keeps it
+// small, drops its location and other metadata, and turns HEIC and the like
+// into a type every browser shows. createImageBitmap applies EXIF rotation.
+const maxSide = 1600;
+async function shrink(file: File) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const context = canvas.getContext("2d")!;
+  // JPEG has no transparency; white beats the black a PNG's clear parts would get.
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject()), "image/jpeg", 0.85),
+  );
+}
 
 export const draftsOf = (list: ListView): Draft[] =>
   list.items.map(({ id, title, quantity, photo, links, note }) => ({
@@ -52,9 +78,35 @@ export function ListEditor({
   const [items, setItems] = useState<Draft[]>(initial?.items ?? [emptyItem()]);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const { getToken } = useAuth();
 
   const update = (index: number, change: Partial<Draft>) =>
     setItems((current) => current.map((item, i) => (i === index ? { ...item, ...change } : item)));
+
+  const upload = async (key: string, file: File) => {
+    const update = (change: Partial<Draft>) =>
+      setItems((current) =>
+        current.map((item) => (item.key === key ? { ...item, ...change } : item)),
+      );
+    update({ uploading: true });
+    setError(undefined);
+    const body = await shrink(file).catch(() => undefined);
+    if (body === undefined) {
+      update({ uploading: false });
+      return setError("That file isn't a photo this browser can read. Try a JPEG or PNG.");
+    }
+    const response = await fetch("/api/photos", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await getToken()}`, "content-type": body.type },
+      body,
+    }).catch(() => undefined);
+    if (!response?.ok) {
+      update({ uploading: false });
+      return setError(response ? await readError(response) : "Couldn't upload the photo.");
+    }
+    const { photo } = (await response.json()) as { photo: string };
+    update({ uploading: false, photo });
+  };
 
   // The owner never sees claims, so any saved wish may have been claimed.
   // Removing it takes the claim with it, so ask first.
@@ -139,7 +191,7 @@ export function ListEditor({
               </div>
               {item.photo !== undefined && (
                 <div {...stylex.props(s.line)}>
-                  {/^https?:\/\/\S/.test(item.photo) && (
+                  {(uploaded(item.photo) || /^https?:\/\/\S/.test(item.photo)) && (
                     <img
                       key={item.photo}
                       src={item.photo}
@@ -149,19 +201,41 @@ export function ListEditor({
                       {...stylex.props(s.preview)}
                     />
                   )}
-                  <input
-                    type="url"
-                    pattern={urlPattern}
-                    aria-label={`Photo link for wish ${index + 1}`}
-                    maxLength={2000}
-                    value={item.photo}
-                    placeholder="Photo link, https://…"
-                    onChange={(event) => update(index, { photo: event.target.value })}
-                    {...stylex.props(ui.field, s.wish, s.detail)}
-                  />
+                  {uploaded(item.photo) ? (
+                    <span {...stylex.props(s.wish, s.uploaded)}>Uploaded photo</span>
+                  ) : (
+                    <>
+                      <input
+                        type="url"
+                        pattern={urlPattern}
+                        aria-label={`Photo link for wish ${index + 1}`}
+                        maxLength={2000}
+                        value={item.photo}
+                        placeholder="Photo link, https://…"
+                        onChange={(event) => update(index, { photo: event.target.value })}
+                        {...stylex.props(ui.field, s.wish, s.detail)}
+                      />
+                      <label {...stylex.props(s.addDetail, s.pick, item.uploading && s.busy)}>
+                        {item.uploading ? "Uploading…" : "Upload"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          aria-label={`Upload a photo for wish ${index + 1}`}
+                          disabled={item.uploading}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = "";
+                            if (file) void upload(item.key, file);
+                          }}
+                          {...stylex.props(s.file)}
+                        />
+                      </label>
+                    </>
+                  )}
                   <button
                     type="button"
                     aria-label={`Remove photo from wish ${index + 1}`}
+                    disabled={item.uploading}
                     onClick={() => update(index, { photo: undefined })}
                     {...stylex.props(ui.iconButton)}
                   >
@@ -249,7 +323,11 @@ export function ListEditor({
         </Ribbon>
       </fieldset>
       <div {...stylex.props(s.submit)}>
-        <button type="submit" disabled={saving} {...stylex.props(ui.button)}>
+        <button
+          type="submit"
+          disabled={saving || items.some((item) => item.uploading)}
+          {...stylex.props(ui.button)}
+        >
           {saving ? submitting : submit}
         </button>
         {onCancel && (
@@ -289,6 +367,12 @@ const s = stylex.create({
     borderRadius: 8,
     backgroundColor: figure.wash,
   },
+  uploaded: { fontSize: 14, color: color.soft, paddingInline: 4 },
+  // The file input stays in the label, which is the visible button, so a click
+  // or Enter on it opens the picker.
+  file: { position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden" },
+  pick: { outline: { default: "none", ":has(:focus-visible)": `2px solid ${color.focus}` } },
+  busy: { color: color.soft, cursor: "default" },
   note: { fontSize: 14, borderRadius: 14, resize: "vertical", lineHeight: 1.45 },
   adds: { display: "flex", flexWrap: "wrap", gap: 4, marginLeft: -8 },
   addDetail: {
@@ -301,6 +385,8 @@ const s = stylex.create({
     borderRadius: 999,
     cursor: { default: "pointer", ":disabled": "default" },
     outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+    position: "relative",
+    whiteSpace: "nowrap",
   },
   quantity: { width: 64, paddingInline: 10, textAlign: "center" },
   add: { paddingTop: 14 },
