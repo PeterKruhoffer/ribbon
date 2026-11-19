@@ -1,9 +1,18 @@
 import { useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { type FormEvent, useState } from "react";
-import { type ListEdit, type ListView, photoPath } from "../shared/wishlist.ts";
+import { Option, Schema } from "effect";
+import {
+  type ListEdit,
+  type ListView,
+  photoPath,
+  unreadableAnswer,
+  UploadedPhoto,
+} from "../shared/wishlist.ts";
 import { readError, Ribbon, row, ui } from "./kit.tsx";
 import { color, figure } from "./tokens.stylex.ts";
+
+const decodeUploaded = Schema.decodeUnknownOption(UploadedPhoto);
 
 // The list form, used to make a list on /new and to edit one on its own page.
 // A wish loaded from a saved list keeps its id, so saving keeps its claims.
@@ -104,8 +113,12 @@ export function ListEditor({
       update({ uploading: false });
       return setError(response ? await readError(response) : "Couldn't upload the photo.");
     }
-    const { photo } = (await response.json()) as { photo: string };
-    update({ uploading: false, photo });
+    const uploaded = decodeUploaded(await response.json());
+    if (Option.isNone(uploaded)) {
+      update({ uploading: false });
+      return setError(unreadableAnswer);
+    }
+    update({ uploading: false, photo: uploaded.value.photo });
   };
 
   // The owner never sees claims, so any saved wish may have been claimed.

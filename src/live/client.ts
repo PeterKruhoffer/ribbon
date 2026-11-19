@@ -1,4 +1,7 @@
-import type { ClientMessage, LiveEvent } from "./protocol.ts";
+import { Option, Schema } from "effect";
+import { type ClientMessage, LiveEvent } from "./protocol.ts";
+
+const decodeEvent = Schema.decodeUnknownOption(Schema.fromJsonString(LiveEvent));
 
 // Browser side of the live transport: one WebSocket per wish list, shared by
 // every subscription on the page. Its shape matches fate's live connector
@@ -42,8 +45,9 @@ export function connectLive(
       connectedBefore = true;
     });
     socket.addEventListener("message", (message) => {
-      const event = JSON.parse(String(message.data)) as LiveEvent;
-      subscriptions.get(event.subscriptionId)?.onEvent(event);
+      // A frame that isn't a LiveEvent is dropped instead of throwing.
+      const event = decodeEvent(String(message.data));
+      if (Option.isSome(event)) subscriptions.get(event.value.subscriptionId)?.onEvent(event.value);
     });
     socket.addEventListener("close", () => {
       if (!closed) setTimeout(() => void open(), options.retryDelay ?? 1000);

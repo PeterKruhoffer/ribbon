@@ -4,7 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
-import type { ListEdit, ListView } from "../shared/wishlist.ts";
+import { Option, Schema } from "effect";
+import { type ListEdit, ListView, unreadableAnswer } from "../shared/wishlist.ts";
 import { draftsOf, ListEditor } from "../ui/editor.tsx";
 import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Page, readError, Ribbon, row, Tag, ui } from "../ui/kit.tsx";
@@ -17,6 +18,8 @@ import { color, figure } from "../ui/tokens.stylex.ts";
 // the owner, and everyone else with the link is a guest.
 
 export const Route = createFileRoute("/lists/$listId")({ component: ListPage });
+
+const decodeListView = Schema.decodeUnknownOption(ListView);
 
 function guestToken() {
   let token = localStorage.getItem("ribbon-guest");
@@ -53,9 +56,11 @@ function ListPage() {
   const load = useCallback(async () => {
     if (!isLoaded) return;
     const response = await fetch(`/api/lists/${listId}`, { headers: await authHeaders() });
-    if (response.ok || response.status === 404)
-      setList(response.status === 404 ? "missing" : ((await response.json()) as ListView));
-    else setError(await readError(response));
+    if (response.status === 404) return setList("missing");
+    if (!response.ok) return setError(await readError(response));
+    const view = decodeListView(await response.json());
+    if (Option.isSome(view)) setList(view.value);
+    else setError(unreadableAnswer);
   }, [isLoaded, userId, listId, authHeaders]);
 
   useEffect(() => {

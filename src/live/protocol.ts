@@ -14,14 +14,16 @@ export const ClientMessage = Schema.Union([
 ]);
 export type ClientMessage = typeof ClientMessage.Type;
 
-export type LiveEventData = { id: string; changed?: ReadonlyArray<string> };
-
-export type LiveEvent = {
-  subscriptionId: string;
-  topic: string;
-  type: "update" | "delete";
-  data: LiveEventData;
-};
+export const LiveEvent = Schema.Struct({
+  subscriptionId: Schema.String,
+  topic: Schema.String,
+  type: Schema.Literals(["update", "delete"]),
+  data: Schema.Struct({
+    id: Schema.String,
+    changed: Schema.optionalKey(Schema.Array(Schema.String)),
+  }),
+});
+export type LiveEvent = typeof LiveEvent.Type;
 
 // Same format as fate's liveEntityTopic, so fate subscriptions match ours.
 export const entityTopic = (type: string, id: string) =>

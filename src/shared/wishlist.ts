@@ -68,6 +68,15 @@ export const ListEdit = Schema.Struct({
 });
 export type ListEdit = typeof ListEdit.Type;
 
+// Answer to POST /api/lists.
+export const CreatedList = Schema.Struct({ listId: Schema.String });
+
+// Answer to POST /api/photos: the path to use as the wish's photo.
+export const UploadedPhoto = Schema.Struct({ photo: Schema.String });
+
+// The browser shows this when an answer from the Backend doesn't match its schema.
+export const unreadableAnswer = "Ribbon's server sent an answer this page can't read. Try again.";
+
 export class ListNotFound extends Schema.TaggedError<ListNotFound>()("ListNotFound", {
   listId: Schema.String,
 }) {}

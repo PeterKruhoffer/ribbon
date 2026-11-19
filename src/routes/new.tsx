@@ -1,9 +1,12 @@
 import { SignInButton, useAuth } from "@clerk/react";
 import * as stylex from "@stylexjs/stylex";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { ListEdit } from "../shared/wishlist.ts";
+import { Option, Schema } from "effect";
+import { CreatedList, type ListEdit, unreadableAnswer } from "../shared/wishlist.ts";
 import { ListEditor } from "../ui/editor.tsx";
 import { Page, readError, ui } from "../ui/kit.tsx";
+
+const decodeCreated = Schema.decodeUnknownOption(CreatedList);
 
 // Making a list needs an account, so only you open it as the owner. A
 // signed-out visitor sees a sign-in prompt instead of the form.
@@ -21,8 +24,9 @@ function NewList() {
       body: JSON.stringify(list),
     });
     if (!response.ok) return readError(response);
-    const { listId } = (await response.json()) as { listId: string };
-    await navigate({ to: "/lists/$listId", params: { listId } });
+    const created = decodeCreated(await response.json());
+    if (Option.isNone(created)) return unreadableAnswer;
+    await navigate({ to: "/lists/$listId", params: { listId: created.value.listId } });
   };
 
   if (isSignedIn === undefined) return <Page>{null}</Page>;
