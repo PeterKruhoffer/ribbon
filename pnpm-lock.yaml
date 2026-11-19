@@ -179,6 +179,9 @@ importers:
       '@clerk/react':
         specifier: 6.18.8
         version: 6.18.8(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@effect/sql-sqlite-do':
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)
       '@fontsource-variable/figtree':
         specifier: 5.3.0
         version: 5.3.0
@@ -545,6 +548,11 @@ packages:
 
   '@effect/sql-d1@4.1.4':
     resolution: {integrity: sha512-x7UtDPNCgcAz6lvGbrf0INHxztV0qV8i4qleqPb31ADeilz7MnGYJ5Qhprqod+ySBUNPdsvXNRE9vm36TznIdg==}
+    peerDependencies:
+      effect: ^4.1.4
+
+  '@effect/sql-sqlite-do@4.1.4':
+    resolution: {integrity: sha512-qeL9J7hgjvKmZu86d6jnzjts+lqxz/Lm/KOPka71++fl30sx9QoQLdHgmzC92S0TydC5EGO7i7rJRhLv4FV+qw==}
     peerDependencies:
       effect: ^4.1.4
 
@@ -2677,6 +2685,10 @@ snapshots:
   '@effect/sql-d1@4.1.4(effect@4.1.4)':
     dependencies:
       '@cloudflare/workers-types': 5.20261113.1
+      effect: 4.1.4
+
+  '@effect/sql-sqlite-do@4.1.4(effect@4.1.4)':
+    dependencies:
       effect: 4.1.4
 
   '@emnapi/runtime@1.11.3':

@@ -28,7 +28,7 @@ Wishlist Durable Object ... src/backend/wishlist.ts
 
 **Photos bucket.** An R2 bucket (`Cloudflare.R2.Bucket`) for photos owners upload, declared in `src/backend/photos.ts` and bound to the Backend; Alchemy creates it with the Backend. Each photo is keyed by a random UUID and carries its uploader's Clerk user id as metadata. A wish stores an uploaded photo as `/api/photos/<key>`, so it stays up when a shop removes its image.
 
-**Wishlist Durable Object.** An Effect Durable Object (`Cloudflare.DurableObject`). One instance per list, addressed by list id. It stores the list in its own SQLite storage and holds the list's WebSockets. Methods:
+**Wishlist Durable Object.** An Effect Durable Object (`Cloudflare.DurableObject`). One instance per list, addressed by list id. It stores the list in its own SQLite storage and holds the list's WebSockets. Its queries live in `src/backend/store.ts`, written as `@effect/sql-sqlite-do` tagged templates; the object keeps the sockets, builds one SQL client per instance, and treats a storage failure as a defect. An edit's writes run in one storage transaction. Methods:
 
 | Method                         | Does                                                                                                                                                                                                                                                                                             |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -65,12 +65,12 @@ The list id is a random UUID, and the share link is `/lists/:listId`. The owner 
 
 ## Files
 
-| Path                      | Holds                                                                                        |
-| ------------------------- | -------------------------------------------------------------------------------------------- |
-| `alchemy.run.ts`          | Stack: Backend, Website, bindings                                                            |
-| `src/backend`             | Effect Worker, Durable Object, photo bucket (`photos.ts`), and Clerk token check (`auth.ts`) |
-| `src/shared`              | Schemas and tagged errors used by both sides                                                 |
-| `src/live`                | WebSocket protocol and browser client                                                        |
-| `src/ui`                  | StyleX tokens and shared UI pieces. See [Design](design.md).                                 |
-| `src/routes`              | TanStack Start pages. `routeTree.gen.ts` is generated; do not edit it, but keep it in Git.   |
-| `scripts/verify-live.mjs` | End-to-end checks against a running deployment                                               |
+| Path                      | Holds                                                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `alchemy.run.ts`          | Stack: Backend, Website, bindings                                                                                     |
+| `src/backend`             | Effect Worker, Durable Object and its SQL (`store.ts`), photo bucket (`photos.ts`), and Clerk token check (`auth.ts`) |
+| `src/shared`              | Schemas and tagged errors used by both sides                                                                          |
+| `src/live`                | WebSocket protocol and browser client                                                                                 |
+| `src/ui`                  | StyleX tokens and shared UI pieces. See [Design](design.md).                                                          |
+| `src/routes`              | TanStack Start pages. `routeTree.gen.ts` is generated; do not edit it, but keep it in Git.                            |
+| `scripts/verify-live.mjs` | End-to-end checks against a running deployment                                                                        |
