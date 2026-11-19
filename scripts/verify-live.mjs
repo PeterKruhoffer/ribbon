@@ -146,7 +146,48 @@ await claim(socks);
 await sleep(1500);
 check("no event after unsubscribe", guestB.events.length === before);
 
-// 6. Subscriptions survive the object going idle (hibernation after ~10 s).
+// 6. The owner edits the list: claims stay on kept wishes, guests get one list
+// event, and the owner's socket gets nothing. Signed-out visitors cannot edit.
+for (const c of [guestB, owner]) c.subscribe("s-list", `entity:List:${list}`);
+await sleep(500);
+const edit = (body, headers = asOwner) =>
+  fetch(api, { method: "PUT", headers, body: JSON.stringify(body) });
+const kept = {
+  title: "Verify list, edited",
+  items: [
+    { id: lego, title: "LEGO Botanical bonsai tree", quantity: 1 },
+    { id: wingspan, title: "Wingspan board game", quantity: 1 },
+    { id: socks, title: "Merino socks", quantity: 6, note: "Size 43" },
+  ],
+};
+check("signed-out edit is 401", (await edit(kept, {})).status === 401);
+check(
+  "edit with an unknown wish id is 409",
+  (await edit({ ...kept, items: [{ id: "missing", title: "x", quantity: 1 }] })).status === 409,
+);
+const edited = await edit(kept);
+await sleep(1500);
+check("owner edit is 204", edited.status === 204, `status ${edited.status}`);
+const afterEdit = await (await fetch(api)).json();
+const editedSocks = afterEdit.items.find((i) => i.id === socks);
+check(
+  "edit keeps claims",
+  afterEdit.title === "Verify list, edited" &&
+    editedSocks.title === "Merino socks" &&
+    editedSocks.remaining === 4,
+  JSON.stringify(editedSocks),
+);
+check(
+  "guest B gets the list event",
+  guestB.events.filter((e) => e.subscriptionId === "s-list").length === 1,
+);
+check(
+  "owner gets nothing for the edit",
+  owner.events.length === 0,
+  `${owner.events.length} events`,
+);
+
+// 7. Subscriptions survive the object going idle (hibernation after ~10 s).
 const idle = await connect(ws());
 idle.subscribe("s-wingspan", topic(wingspan));
 await sleep(20000);

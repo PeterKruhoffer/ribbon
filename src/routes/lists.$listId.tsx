@@ -4,13 +4,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectLive } from "../live/client.ts";
 import { entityTopic } from "../live/protocol.ts";
-import type { ListView } from "../shared/wishlist.ts";
+import type { ListEdit, ListView } from "../shared/wishlist.ts";
+import { draftsOf, ListEditor } from "../ui/editor.tsx";
 import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Page, readError, Ribbon, row, Tag, ui } from "../ui/kit.tsx";
 import { color, figure } from "../ui/tokens.stylex.ts";
 
 // One list. Guests claim items, and a claim in one guest tab updates the
-// others live; the owner sees the share link and receives no claim events.
+// others live. The owner sees the share link, can edit the list, and receives
+// no claim events. An edit reaches guests live too.
 // The Backend decides the role: the signed-in user who created the list is
 // the owner, and everyone else with the link is a guest.
 
@@ -35,6 +37,7 @@ function ListPage() {
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [claiming, setClaiming] = useState<string>();
+  const [editing, setEditing] = useState(false);
   // Each claim gets a new id, so its figure remounts and its animation plays again.
   const [claimed, setClaimed] = useState<{ id: number; title: string }>();
   // Items already taken when the list first showed. Their tags hang still; the
@@ -71,6 +74,12 @@ function ListPage() {
       return `${protocol}//${location.host}/api/lists/${listId}/live${query}`;
     };
     const live = connectLive(url, { onReconnect: () => void load() });
+    // The owner's edits arrive on the list's topic; claims on each item's.
+    void live.subscribe({
+      id: "list",
+      topic: entityTopic("List", listId),
+      onEvent: () => void load(),
+    });
     for (const id of itemIds.split(",")) {
       void live.subscribe({
         id,
@@ -96,6 +105,17 @@ function ListPage() {
     else setError(await readError(response));
     await load();
     setClaiming(undefined);
+  };
+
+  const save = async (edit: ListEdit) => {
+    const response = await fetch(`/api/lists/${listId}`, {
+      method: "PUT",
+      headers: await authHeaders(),
+      body: JSON.stringify(edit),
+    });
+    if (!response.ok) return readError(response);
+    await load();
+    setEditing(false);
   };
 
   if (!list)
@@ -127,6 +147,22 @@ function ListPage() {
   const takenIds = takenAtLoad.current.ids;
   const shareUrl = `${location.origin}/lists/${listId}`;
   const owner = list.role === "owner";
+  if (owner && editing)
+    return (
+      <Page>
+        <h1 {...stylex.props(ui.title)}>Edit your list</h1>
+        <p {...stylex.props(ui.sub)}>
+          Guests see your changes right away. Wishes keep their claims unless you remove them.
+        </p>
+        <ListEditor
+          initial={{ title: list.title, items: draftsOf(list) }}
+          submit="Save changes"
+          submitting="Saving…"
+          onSubmit={save}
+          onCancel={() => setEditing(false)}
+        />
+      </Page>
+    );
   return (
     <Page>
       <h1 {...stylex.props(ui.title)}>{list.title}</h1>
@@ -150,6 +186,9 @@ function ListPage() {
             {...stylex.props(ui.button)}
           >
             {copied ? "Copied" : "Copy share link"}
+          </button>
+          <button onClick={() => setEditing(true)} {...stylex.props(ui.button, ui.quiet)}>
+            Edit list
           </button>
         </div>
       )}

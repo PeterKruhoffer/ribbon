@@ -34,20 +34,31 @@ const Url = Schema.Trim.check(
   Schema.isPattern(/^https?:\/\/[^\s/?#]+\S*$/i),
 );
 
+const wish = {
+  title: Text(200),
+  quantity: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99 })),
+  photo: Schema.optionalKey(Url),
+  links: Schema.optionalKey(Schema.Array(Url).check(Schema.isMaxLength(5))),
+  note: Schema.optionalKey(Text(500)),
+};
+
 // Body of POST /api/lists.
 export const NewList = Schema.Struct({
   title: Text(100),
-  items: Schema.Array(
-    Schema.Struct({
-      title: Text(200),
-      quantity: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99 })),
-      photo: Schema.optionalKey(Url),
-      links: Schema.optionalKey(Schema.Array(Url).check(Schema.isMaxLength(5))),
-      note: Schema.optionalKey(Text(500)),
-    }),
-  ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
+  items: Schema.Array(Schema.Struct(wish)).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 });
 export type NewList = typeof NewList.Type;
+
+// Body of PUT /api/lists/:listId: the whole list as it should be now. Wishes
+// with an id keep it (and their claims), wishes without one are new, and
+// wishes left out are removed.
+export const ListEdit = Schema.Struct({
+  title: Text(100),
+  items: Schema.Array(
+    Schema.Struct({ id: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))), ...wish }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
+});
+export type ListEdit = typeof ListEdit.Type;
 
 export class ListNotFound extends Schema.TaggedError<ListNotFound>()("ListNotFound", {
   listId: Schema.String,
@@ -61,6 +72,9 @@ export class OwnerCannotClaim extends Schema.TaggedError<OwnerCannotClaim>()(
   "OwnerCannotClaim",
   {},
 ) {}
+
+// Only the list's owner edits it.
+export class NotOwner extends Schema.TaggedError<NotOwner>()("NotOwner", {}) {}
 
 // The request carried a Clerk session token that failed verification.
 export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}

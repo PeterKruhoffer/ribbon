@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Config, Effect, Schema } from "effect";
 import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { NewList } from "../shared/wishlist.ts";
+import { ListEdit, NewList } from "../shared/wishlist.ts";
 import { viewerHeader, viewerOf } from "./auth.ts";
 import Wishlist from "./wishlist.ts";
 
@@ -11,6 +11,12 @@ import Wishlist from "./wishlist.ts";
 
 const listPath = /^\/api\/lists\/([\w-]{1,64})(?:\/(.*))?$/;
 const ClaimBody = Schema.Struct({ guest: Schema.String.check(Schema.isMaxLength(64)) });
+
+const invalidList = () =>
+  HttpServerResponse.text(
+    "Check the list: 1 to 50 wishes, each with a name, up to 5 links and a photo link starting with https://, and a note of up to 500 characters",
+    { status: 400 },
+  );
 
 const unauthorized = () =>
   Effect.succeed(HttpServerResponse.text("Sign in again", { status: 401 }));
@@ -52,14 +58,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
                 return lists.getByName(listId).create(list, viewer).pipe(Effect.as({ listId }));
               }),
               Effect.flatMap((created) => HttpServerResponse.json(created, { status: 201 })),
-              Effect.catchTag("SchemaError", () =>
-                Effect.succeed(
-                  HttpServerResponse.text(
-                    "Check the list: 1 to 50 wishes, each with a name, up to 5 links and a photo link starting with https://, and a note of up to 500 characters",
-                    { status: 400 },
-                  ),
-                ),
-              ),
+              Effect.catchTag("SchemaError", () => Effect.succeed(invalidList())),
             );
           }
           const match = listPath.exec(url.pathname);
@@ -74,6 +73,30 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
               Effect.catchTag("ListNotFound", () =>
                 Effect.succeed(HttpServerResponse.text("No such list", { status: 404 })),
               ),
+            );
+          }
+          if (rest === "" && request.method === "PUT") {
+            if (viewer === undefined)
+              return HttpServerResponse.text("Sign in to edit the list", { status: 401 });
+            return yield* HttpServerRequest.schemaBodyJson(ListEdit).pipe(
+              Effect.flatMap((edit) => list.update(listId, edit, viewer)),
+              Effect.as(HttpServerResponse.empty({ status: 204 })),
+              Effect.catchTag("ListNotFound", () =>
+                Effect.succeed(HttpServerResponse.text("No such list", { status: 404 })),
+              ),
+              Effect.catchTag("NotOwner", () =>
+                Effect.succeed(
+                  HttpServerResponse.text("Only the list's owner can edit it", { status: 403 }),
+                ),
+              ),
+              Effect.catchTag("ItemNotFound", () =>
+                Effect.succeed(
+                  HttpServerResponse.text("The list changed. Reload it and try again", {
+                    status: 409,
+                  }),
+                ),
+              ),
+              Effect.catchTag("SchemaError", () => Effect.succeed(invalidList())),
             );
           }
           if (rest === "live") {
