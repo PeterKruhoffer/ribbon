@@ -1,7 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import { photoPath } from "../shared/wishlist.ts";
+import {
+  NotAnImage,
+  PhotoNotFound,
+  PhotoStorageFailed,
+  PhotoTooLarge,
+  photoPath,
+} from "../shared/wishlist.ts";
 
 // Wish photos the owner uploads, kept in R2 so they stay up after a shop takes
 // its own image down. Each photo's key is a random UUID, and its URL is
@@ -26,45 +32,40 @@ const imageType = (bytes: Uint8Array) => {
 
 const storageFailed = (error: unknown) =>
   Effect.logError("Photo storage failed", error).pipe(
-    Effect.as(HttpServerResponse.text("Photo storage failed, try again", { status: 502 })),
+    Effect.andThen(Effect.fail(new PhotoStorageFailed())),
   );
 
 export const makePhotos = Effect.gen(function* () {
   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Photos);
 
   // POST /api/photos with the image as the body. viewer is the signed-in owner.
-  const upload = (viewer: string) =>
-    Effect.gen(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      if (Number(request.headers["content-length"] ?? 0) > maxBytes)
-        return HttpServerResponse.text("Photos can be up to 5 MB", { status: 413 });
-      const bytes = new Uint8Array(yield* request.arrayBuffer);
-      if (bytes.byteLength > maxBytes)
-        return HttpServerResponse.text("Photos can be up to 5 MB", { status: 413 });
-      const contentType = imageType(bytes);
-      if (contentType === undefined)
-        return HttpServerResponse.text("Upload a JPEG, PNG, GIF, or WebP photo", { status: 415 });
-      const key = crypto.randomUUID();
-      yield* bucket.put(key, bytes, {
-        httpMetadata: { contentType },
-        customMetadata: { owner: viewer },
-      });
-      return yield* HttpServerResponse.json({ photo: `${photoPath}${key}` }, { status: 201 });
-    }).pipe(Effect.catchTag("R2Error", storageFailed));
+  const upload = Effect.fn("Photos.upload")(function* (viewer: string) {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    if (Number(request.headers["content-length"] ?? 0) > maxBytes)
+      return yield* new PhotoTooLarge();
+    const bytes = new Uint8Array(yield* request.arrayBuffer.pipe(Effect.orDie));
+    if (bytes.byteLength > maxBytes) return yield* new PhotoTooLarge();
+    const contentType = imageType(bytes);
+    if (contentType === undefined) return yield* new NotAnImage();
+    const key = crypto.randomUUID();
+    yield* bucket
+      .put(key, bytes, { httpMetadata: { contentType }, customMetadata: { owner: viewer } })
+      .pipe(Effect.catchTag("R2Error", storageFailed));
+    return { photo: `${photoPath}${key}` };
+  });
 
   // GET /api/photos/<key>. A key never gets new content, so browsers keep it.
-  const serve = (key: string) =>
-    Effect.gen(function* () {
-      const object = yield* bucket.get(key);
-      if (object === null) return HttpServerResponse.text("No such photo", { status: 404 });
-      return HttpServerResponse.stream(object.body, {
-        contentType: object.httpMetadata?.contentType ?? "application/octet-stream",
-        headers: {
-          "cache-control": "public, max-age=31536000, immutable",
-          "x-content-type-options": "nosniff",
-        },
-      });
-    }).pipe(Effect.catchTag("R2Error", storageFailed));
+  const serve = Effect.fn("Photos.serve")(function* (key: string) {
+    const object = yield* bucket.get(key).pipe(Effect.catchTag("R2Error", storageFailed));
+    if (object === null) return yield* new PhotoNotFound();
+    return HttpServerResponse.stream(object.body, {
+      contentType: object.httpMetadata?.contentType ?? "application/octet-stream",
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  });
 
   return { upload, serve };
 });

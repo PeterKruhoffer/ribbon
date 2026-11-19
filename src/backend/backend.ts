@@ -1,27 +1,58 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Config, Effect, Schema } from "effect";
-import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { ListEdit, NewList } from "../shared/wishlist.ts";
+import { Config, Effect, Layer, Path, Schema } from "effect";
+import {
+  Etag,
+  Headers,
+  HttpPlatform,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
+import { HttpApiBuilder } from "effect/http-api";
+import { Authentication, RibbonApi, SignedIn, SignedInUser, Viewer } from "../shared/api.ts";
+import {
+  FullyClaimed,
+  ItemNotFound,
+  ListChanged,
+  ListNotFound,
+  NotOwner,
+  OwnerCannotClaim,
+  SignInRequired,
+} from "../shared/wishlist.ts";
 import { viewerHeader, viewerOf } from "./auth.ts";
 import { makePhotos } from "./photos.ts";
 import Wishlist from "./wishlist.ts";
 
-// The Effect Worker behind /api. It hosts the Wishlist Durable Object and
-// routes each request to the object for its list. The website Worker forwards
-// /api/* here through a service binding, so the browser sees one origin.
+// The Effect Worker behind /api. It serves RibbonApi (src/shared/api.ts): each
+// handler calls one Durable Object or photo method, and the errors those fail
+// with carry their own HTTP status. The website Worker forwards /api/* here
+// through a service binding, so the browser sees one origin.
 
-const listPath = /^\/api\/lists\/([\w-]{1,64})(?:\/(.*))?$/;
-const photoRoute = /^\/api\/photos\/([0-9a-f-]{36})$/;
-const ClaimBody = Schema.Struct({ guest: Schema.String.check(Schema.isMaxLength(64)) });
+// The Backend never serves files, so HttpPlatform's file responses are stubbed.
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
 
-const invalidList = () =>
-  HttpServerResponse.text(
-    "Check the list: 1 to 50 wishes, each with a name, up to 5 links starting with https://, a photo link or upload, and a note of up to 500 characters",
-    { status: 400 },
-  );
-
-const unauthorized = () =>
-  Effect.succeed(HttpServerResponse.text("Sign in again", { status: 401 }));
+// A Durable Object's typed errors arrive over RPC as plain objects, which the
+// API cannot encode. Decoding rebuilds the error classes.
+const ListError = Schema.Union([
+  ListNotFound,
+  ItemNotFound,
+  ListChanged,
+  OwnerCannotClaim,
+  NotOwner,
+  FullyClaimed,
+]);
+const isListError = Schema.is(ListError);
+const decodeListError = Schema.decodeUnknownSync(ListError);
+const fromObject = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.mapError(effect, (error) => (isListError(error) ? error : decodeListError(error)) as E);
 
 export default class Backend extends Cloudflare.Worker<Backend>()(
   "Backend",
@@ -37,113 +68,107 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
     // Config value as a secret.
     const jwtKey = yield* Config.String("CLERK_JWT_KEY");
 
-    return {
-      fetch: Effect.gen(function* () {
+    const authentication = Layer.succeed(
+      Authentication,
+      Effect.fnUntraced(function* (httpEffect) {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const url = new URL(request.url, "http://ribbon");
-        // Browsers cannot set headers on a WebSocket, so sockets send the Clerk
-        // session token as ?token=.
         const bearer = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1];
-        const token = bearer ?? url.searchParams.get("token") ?? undefined;
-
-        return yield* Effect.gen(function* () {
-          const viewer = yield* viewerOf(jwtKey, token);
-
-          // Only signed-in users create lists, and the creator becomes the owner.
-          // A random UUID is the list's id and its share link, so links can't be
-          // guessed.
-          if (url.pathname === "/api/lists" && request.method === "POST") {
-            if (viewer === undefined)
-              return HttpServerResponse.text("Sign in to create a list", { status: 401 });
-            return yield* HttpServerRequest.schemaBodyJson(NewList).pipe(
-              Effect.flatMap((list) => {
-                const listId = crypto.randomUUID();
-                return lists.getByName(listId).create(list, viewer).pipe(Effect.as({ listId }));
-              }),
-              Effect.flatMap((created) => HttpServerResponse.json(created, { status: 201 })),
-              Effect.catchTag("SchemaError", () => Effect.succeed(invalidList())),
-            );
-          }
-          // Owners upload a wish's photo before saving the list; anyone with
-          // the list loads it.
-          if (url.pathname === "/api/photos" && request.method === "POST") {
-            if (viewer === undefined)
-              return HttpServerResponse.text("Sign in to upload a photo", { status: 401 });
-            return yield* photos.upload(viewer);
-          }
-          const photo = photoRoute.exec(url.pathname);
-          if (photo && request.method === "GET") return yield* photos.serve(photo[1]!);
-
-          const match = listPath.exec(url.pathname);
-          if (!match) return HttpServerResponse.text("Not found", { status: 404 });
-          const listId = match[1]!;
-          const rest = match[2] ?? "";
-          const list = lists.getByName(listId);
-
-          if (rest === "" && request.method === "GET") {
-            return yield* list.read(listId, viewer).pipe(
-              Effect.flatMap((view) => HttpServerResponse.json(view)),
-              Effect.catchTag("ListNotFound", () =>
-                Effect.succeed(HttpServerResponse.text("No such list", { status: 404 })),
-              ),
-            );
-          }
-          if (rest === "" && request.method === "PUT") {
-            if (viewer === undefined)
-              return HttpServerResponse.text("Sign in to edit the list", { status: 401 });
-            return yield* HttpServerRequest.schemaBodyJson(ListEdit).pipe(
-              Effect.flatMap((edit) => list.update(listId, edit, viewer)),
-              Effect.as(HttpServerResponse.empty({ status: 204 })),
-              Effect.catchTag("ListNotFound", () =>
-                Effect.succeed(HttpServerResponse.text("No such list", { status: 404 })),
-              ),
-              Effect.catchTag("NotOwner", () =>
-                Effect.succeed(
-                  HttpServerResponse.text("Only the list's owner can edit it", { status: 403 }),
-                ),
-              ),
-              Effect.catchTag("ItemNotFound", () =>
-                Effect.succeed(
-                  HttpServerResponse.text("The list changed. Reload it and try again", {
-                    status: 409,
-                  }),
-                ),
-              ),
-              Effect.catchTag("SchemaError", () => Effect.succeed(invalidList())),
-            );
-          }
-          if (rest === "live") {
-            if (request.headers.upgrade !== "websocket") {
-              return HttpServerResponse.text("Expected a WebSocket upgrade", { status: 426 });
-            }
-            return yield* list.fetch(
-              request.modify({
-                headers: Headers.set(request.headers, viewerHeader, viewer ?? ""),
-              }),
-            );
-          }
-          const claim = /^items\/([\w-]{1,64})\/claim$/.exec(rest);
-          if (claim && request.method === "POST") {
-            return yield* HttpServerRequest.schemaBodyJson(ClaimBody).pipe(
-              Effect.flatMap(({ guest }) => list.claim(claim[1]!, guest, viewer)),
-              Effect.flatMap((result) => HttpServerResponse.json(result)),
-              Effect.catchTag("OwnerCannotClaim", () =>
-                Effect.succeed(HttpServerResponse.text("Only guests can claim", { status: 403 })),
-              ),
-              Effect.catchTag("FullyClaimed", () =>
-                Effect.succeed(HttpServerResponse.text("Already fully claimed", { status: 409 })),
-              ),
-              Effect.catchTag("ItemNotFound", () =>
-                Effect.succeed(HttpServerResponse.text("No such item", { status: 404 })),
-              ),
-              Effect.catchTag("SchemaError", () =>
-                Effect.succeed(HttpServerResponse.text("Expected { guest }", { status: 400 })),
-              ),
-            );
-          }
-          return HttpServerResponse.text("Not found", { status: 404 });
-        }).pipe(Effect.catchTag("Unauthorized", unauthorized));
+        const query = new URL(request.url, "http://ribbon").searchParams.get("token");
+        const viewer = yield* viewerOf(jwtKey, bearer ?? query ?? undefined);
+        return yield* Effect.provideService(httpEffect, Viewer, viewer);
       }),
+    );
+
+    const signedIn = Layer.succeed(
+      SignedIn,
+      Effect.fnUntraced(function* (httpEffect) {
+        const viewer = yield* Viewer;
+        if (viewer === undefined) return yield* new SignInRequired();
+        return yield* Effect.provideService(httpEffect, SignedInUser, viewer);
+      }),
+    );
+
+    // Handlers are untraced: each Durable Object and photo method has its own span.
+    const listHandlers = HttpApiBuilder.group(RibbonApi, "lists", (handlers) =>
+      Effect.succeed(
+        handlers
+          .handle(
+            "create",
+            Effect.fnUntraced(function* ({ payload }) {
+              const owner = yield* SignedInUser;
+              const listId = crypto.randomUUID();
+              yield* fromObject(lists.getByName(listId).create(payload, owner));
+              return { listId };
+            }),
+          )
+          .handle(
+            "read",
+            Effect.fnUntraced(function* ({ params }) {
+              return yield* fromObject(
+                lists.getByName(params.listId).read(params.listId, yield* Viewer),
+              );
+            }),
+          )
+          .handle(
+            "update",
+            Effect.fnUntraced(function* ({ params, payload }) {
+              const owner = yield* SignedInUser;
+              yield* fromObject(
+                lists.getByName(params.listId).update(params.listId, payload, owner),
+              );
+            }),
+          )
+          .handle(
+            "claim",
+            Effect.fnUntraced(function* ({ params, payload }) {
+              const viewer = yield* Viewer;
+              return yield* fromObject(
+                lists.getByName(params.listId).claim(params.itemId, payload.guest, viewer),
+              );
+            }),
+          )
+          // The Durable Object answers the upgrade itself. It reads the verified
+          // viewer from viewerHeader, which is always overwritten here, so a
+          // browser cannot pick its own.
+          .handleRaw(
+            "live",
+            Effect.fnUntraced(function* ({ params, request }) {
+              if (request.headers.upgrade !== "websocket")
+                return HttpServerResponse.text("Expected a WebSocket upgrade", { status: 426 });
+              const viewer = yield* Viewer;
+              return yield* lists
+                .getByName(params.listId)
+                .fetch(
+                  request.modify({
+                    headers: Headers.set(request.headers, viewerHeader, viewer ?? ""),
+                  }),
+                )
+                .pipe(Effect.orDie);
+            }),
+          ),
+      ),
+    );
+
+    const photoHandlers = HttpApiBuilder.group(RibbonApi, "photos", (handlers) =>
+      Effect.succeed(
+        handlers
+          .handleRaw(
+            "upload",
+            Effect.fnUntraced(function* () {
+              return yield* photos.upload(yield* SignedInUser);
+            }),
+          )
+          .handle("serve", ({ params }) => photos.serve(params.key)),
+      ),
+    );
+
+    return {
+      fetch: HttpApiBuilder.layer(RibbonApi).pipe(
+        Layer.provide([listHandlers, photoHandlers]),
+        Layer.provide([authentication, signedIn]),
+        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+        HttpRouter.toHttpEffect,
+      ),
     };
   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

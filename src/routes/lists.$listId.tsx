@@ -103,7 +103,7 @@ function ListPage() {
     setClaiming(itemId);
     const response = await fetch(`/api/lists/${listId}/items/${itemId}/claim`, {
       method: "POST",
-      headers: await authHeaders(),
+      headers: { ...(await authHeaders()), "content-type": "application/json" },
       body: JSON.stringify({ guest: guestToken() }),
     });
     if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title }));
@@ -115,7 +115,7 @@ function ListPage() {
   const save = async (edit: ListEdit) => {
     const response = await fetch(`/api/lists/${listId}`, {
       method: "PUT",
-      headers: await authHeaders(),
+      headers: { ...(await authHeaders()), "content-type": "application/json" },
       body: JSON.stringify(edit),
     });
     if (!response.ok) return readError(response);

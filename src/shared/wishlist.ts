@@ -77,25 +77,82 @@ export const UploadedPhoto = Schema.Struct({ photo: Schema.String });
 // The browser shows this when an answer from the Backend doesn't match its schema.
 export const unreadableAnswer = "Ribbon's server sent an answer this page can't read. Try again.";
 
-export class ListNotFound extends Schema.TaggedError<ListNotFound>()("ListNotFound", {
-  listId: Schema.String,
-}) {}
+// Failures the Backend answers with, each with its HTTP status. The browser
+// turns the tag into words (readError in src/ui/kit.tsx).
 
-export class ItemNotFound extends Schema.TaggedError<ItemNotFound>()("ItemNotFound", {
-  itemId: Schema.String,
-}) {}
+export class ListNotFound extends Schema.TaggedError<ListNotFound>()(
+  "ListNotFound",
+  { listId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+export class ItemNotFound extends Schema.TaggedError<ItemNotFound>()(
+  "ItemNotFound",
+  { itemId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+// An edit named a wish the list no longer has, so the owner's copy is stale.
+export class ListChanged extends Schema.TaggedError<ListChanged>()(
+  "ListChanged",
+  { itemId: Schema.String },
+  { httpApiStatus: 409 },
+) {}
 
 export class OwnerCannotClaim extends Schema.TaggedError<OwnerCannotClaim>()(
   "OwnerCannotClaim",
   {},
+  { httpApiStatus: 403 },
 ) {}
 
 // Only the list's owner edits it.
-export class NotOwner extends Schema.TaggedError<NotOwner>()("NotOwner", {}) {}
+export class NotOwner extends Schema.TaggedError<NotOwner>()(
+  "NotOwner",
+  {},
+  { httpApiStatus: 403 },
+) {}
 
 // The request carried a Clerk session token that failed verification.
-export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
+  "Unauthorized",
+  {},
+  { httpApiStatus: 401 },
+) {}
 
-export class FullyClaimed extends Schema.TaggedError<FullyClaimed>()("FullyClaimed", {
-  itemId: Schema.String,
-}) {}
+// Making a list, editing one, and uploading a photo need a signed-in user.
+export class SignInRequired extends Schema.TaggedError<SignInRequired>()(
+  "SignInRequired",
+  {},
+  { httpApiStatus: 401 },
+) {}
+
+export class FullyClaimed extends Schema.TaggedError<FullyClaimed>()(
+  "FullyClaimed",
+  { itemId: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
+export class PhotoNotFound extends Schema.TaggedError<PhotoNotFound>()(
+  "PhotoNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}
+
+export class PhotoTooLarge extends Schema.TaggedError<PhotoTooLarge>()(
+  "PhotoTooLarge",
+  {},
+  { httpApiStatus: 413 },
+) {}
+
+// The upload's first bytes are not a JPEG, PNG, GIF, or WebP.
+export class NotAnImage extends Schema.TaggedError<NotAnImage>()(
+  "NotAnImage",
+  {},
+  { httpApiStatus: 415 },
+) {}
+
+export class PhotoStorageFailed extends Schema.TaggedError<PhotoStorageFailed>()(
+  "PhotoStorageFailed",
+  {},
+  { httpApiStatus: 502 },
+) {}

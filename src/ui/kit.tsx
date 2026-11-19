@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Show, SignInButton, UserButton } from "@clerk/react";
+import { Predicate } from "effect";
 import type { ReactNode } from "react";
 import { color, font } from "./tokens.stylex.ts";
 
@@ -294,10 +295,30 @@ const s = stylex.create({
   },
 });
 
-// The Backend answers errors with plain text meant for people. Anything else,
-// such as an HTML 404 page when no Backend is running, gets a generic message.
+// The Backend answers errors as JSON tagged with the error's name (see
+// src/shared/wishlist.ts), and a body that fails its schema as an empty 400.
+// Anything else, such as an HTML 404 page when no Backend is running, gets a
+// generic message.
+const errorMessages: Record<string, string> = {
+  ListNotFound: "No such list",
+  ItemNotFound: "No such item",
+  ListChanged: "The list changed. Reload it and try again",
+  OwnerCannotClaim: "Only guests can claim",
+  NotOwner: "Only the list's owner can edit it",
+  FullyClaimed: "Already fully claimed",
+  Unauthorized: "Sign in again",
+  SignInRequired: "Sign in first",
+  PhotoNotFound: "No such photo",
+  PhotoTooLarge: "Photos can be up to 5 MB",
+  NotAnImage: "Upload a JPEG, PNG, GIF, or WebP photo",
+  PhotoStorageFailed: "Photo storage failed, try again",
+};
+
 export async function readError(response: Response) {
-  return response.headers.get("content-type")?.startsWith("text/plain")
-    ? response.text()
-    : `Ribbon's server didn't answer (${response.status}). Try again in a moment.`;
+  const body: unknown = await response.json().catch(() => undefined);
+  const tag = Predicate.hasProperty(body, "_tag") ? body._tag : undefined;
+  if (typeof tag === "string" && tag in errorMessages) return errorMessages[tag]!;
+  if (response.status === 400)
+    return "Check the list: 1 to 50 wishes, each with a name, up to 5 links starting with https://, a photo link or upload, and a note of up to 500 characters";
+  return `Ribbon's server didn't answer (${response.status}). Try again in a moment.`;
 }

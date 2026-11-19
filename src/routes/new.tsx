@@ -20,7 +20,7 @@ function NewList() {
   const create = async (list: ListEdit) => {
     const response = await fetch("/api/lists", {
       method: "POST",
-      headers: { authorization: `Bearer ${await getToken()}` },
+      headers: { authorization: `Bearer ${await getToken()}`, "content-type": "application/json" },
       body: JSON.stringify(list),
     });
     if (!response.ok) return readError(response);

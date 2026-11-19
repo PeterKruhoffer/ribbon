@@ -3,6 +3,7 @@ import { SqlClient } from "effect/sql";
 import {
   FullyClaimed,
   ItemNotFound,
+  ListChanged,
   type ListEdit,
   ListNotFound,
   type ListView,
@@ -90,7 +91,7 @@ export const updateList = Effect.fnUntraced(function* (
   const kept = new Set<string>();
   for (const { id } of list.items) {
     if (id === undefined) continue;
-    if (!existing.has(id) || kept.has(id)) return yield* new ItemNotFound({ itemId: id });
+    if (!existing.has(id) || kept.has(id)) return yield* new ListChanged({ itemId: id });
     kept.add(id);
   }
   yield* sql.withTransaction(

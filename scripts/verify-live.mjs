@@ -8,6 +8,14 @@ const token = process.env.RIBBON_OWNER_TOKEN;
 if (!token) throw new Error("Set RIBBON_OWNER_TOKEN to a Clerk session token");
 const asOwner = { authorization: `Bearer ${token}` };
 const topic = (id) => `entity:Item:${id}`;
+// JSON bodies say so, as the pages' requests do; the Backend refuses others.
+const send = (url, init = {}) =>
+  fetch(
+    url,
+    typeof init.body === "string"
+      ? { ...init, headers: { "content-type": "application/json", ...init.headers } }
+      : init,
+  );
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (name, ok, detail = "") => {
@@ -32,26 +40,26 @@ const connect = (url) =>
   });
 
 const claim = (item, guest = "guest-a", headers = {}) =>
-  fetch(`${api}/items/${item}/claim`, { method: "POST", headers, body: JSON.stringify({ guest }) });
+  send(`${api}/items/${item}/claim`, { method: "POST", headers, body: JSON.stringify({ guest }) });
 
 // 0. Create a list. Only signed-in users create lists, invalid bodies are
 // refused, and unknown lists are 404.
 const newList = JSON.stringify({ title: "Anonymous", items: [{ title: "Socks", quantity: 1 }] });
-const anonymous = await fetch(`${base}/api/lists`, { method: "POST", body: newList });
+const anonymous = await send(`${base}/api/lists`, { method: "POST", body: newList });
 check("create without sign-in is 401", anonymous.status === 401, `status ${anonymous.status}`);
-const forged = await fetch(`${base}/api/lists`, {
+const forged = await send(`${base}/api/lists`, {
   method: "POST",
   headers: { authorization: `Bearer ${token.slice(0, -4)}AAAA` },
   body: newList,
 });
 check("create with a forged token is 401", forged.status === 401, `status ${forged.status}`);
-const bad = await fetch(`${base}/api/lists`, {
+const bad = await send(`${base}/api/lists`, {
   method: "POST",
   headers: asOwner,
   body: JSON.stringify({ title: "  ", items: [] }),
 });
 check("invalid list is 400", bad.status === 400, `status ${bad.status}`);
-const unknown = await fetch(`${base}/api/lists/${crypto.randomUUID()}`);
+const unknown = await send(`${base}/api/lists/${crypto.randomUUID()}`);
 check("unknown list is 404", unknown.status === 404, `status ${unknown.status}`);
 
 // Photos: only signed-in users upload, only images are kept, and anyone reads
@@ -61,7 +69,7 @@ const png = Buffer.from(
   "base64",
 );
 const upload = (body, headers = asOwner) =>
-  fetch(`${base}/api/photos`, { method: "POST", headers, body });
+  send(`${base}/api/photos`, { method: "POST", headers, body });
 const anonymousPhoto = await upload(png, {});
 check("upload without sign-in is 401", anonymousPhoto.status === 401);
 const svg = await upload("<svg xmlns='http://www.w3.org/2000/svg'/>");
@@ -69,7 +77,7 @@ check("non-image upload is 415", svg.status === 415, `status ${svg.status}`);
 const uploaded = await upload(png);
 check("upload is 201", uploaded.status === 201, `status ${uploaded.status}`);
 const { photo } = await uploaded.json();
-const served = await fetch(`${base}${photo}`);
+const served = await send(`${base}${photo}`);
 check(
   "photo reads back signed out, as PNG, byte for byte",
   served.status === 200 &&
@@ -78,7 +86,7 @@ check(
   `status ${served.status}, ${served.headers.get("content-type")}`,
 );
 
-const created = await fetch(`${base}/api/lists`, {
+const created = await send(`${base}/api/lists`, {
   method: "POST",
   headers: asOwner,
   body: JSON.stringify({
@@ -94,7 +102,7 @@ check("create is 201", created.status === 201, `status ${created.status}`);
 const { listId: list } = await created.json();
 const api = `${base}/api/lists/${list}`;
 const ws = (query = "") => `${base.replace(/^http/, "ws")}/api/lists/${list}/live${query}`;
-const initial = await (await fetch(api)).json();
+const initial = await (await send(api)).json();
 check(
   "new list has its title and items in order",
   initial.title === "Verify list" &&
@@ -145,14 +153,14 @@ check(
   "guest B gets exactly one lego event",
   guestB.events.filter((e) => e.subscriptionId === "s-lego").length === 1,
 );
-const guestView = await (await fetch(api)).json();
+const guestView = await (await send(api)).json();
 check("lego shows 0 left", guestView.items.find((i) => i.id === lego).remaining === 0);
-const ownerView = await (await fetch(api, { headers: asOwner })).json();
+const ownerView = await (await send(api, { headers: asOwner })).json();
 check(
   "owner view has no remaining counts",
   ownerView.role === "owner" && ownerView.items.every((i) => !("remaining" in i)),
 );
-const oldLink = await (await fetch(`${api}?as=owner`)).json();
+const oldLink = await (await send(`${api}?as=owner`)).json();
 check("?as=owner without a token is a guest", oldLink.role === "guest");
 
 // 3. The owner cannot claim.
@@ -160,7 +168,7 @@ check("owner claim is refused", (await claim(socks, "owner", asOwner)).status ==
 
 // 4. Claiming a missing item is a 404, also on a list that doesn't exist.
 const fresh = `${base}/api/lists/${crypto.randomUUID()}/items/missing/claim`;
-const missing = await fetch(fresh, { method: "POST", body: JSON.stringify({ guest: "g" }) });
+const missing = await send(fresh, { method: "POST", body: JSON.stringify({ guest: "g" }) });
 check("missing item on an unknown list is 404", missing.status === 404, `status ${missing.status}`);
 check("missing item is 404", (await claim("missing")).status === 404);
 
@@ -177,7 +185,7 @@ check("no event after unsubscribe", guestB.events.length === before);
 for (const c of [guestB, owner]) c.subscribe("s-list", `entity:List:${list}`);
 await sleep(500);
 const edit = (body, headers = asOwner) =>
-  fetch(api, { method: "PUT", headers, body: JSON.stringify(body) });
+  send(api, { method: "PUT", headers, body: JSON.stringify(body) });
 const kept = {
   title: "Verify list, edited",
   items: [
@@ -194,7 +202,7 @@ check(
 const edited = await edit(kept);
 await sleep(1500);
 check("owner edit is 204", edited.status === 204, `status ${edited.status}`);
-const afterEdit = await (await fetch(api)).json();
+const afterEdit = await (await send(api)).json();
 const editedSocks = afterEdit.items.find((i) => i.id === socks);
 check(
   "edit keeps claims and takes an uploaded photo",
