@@ -9,6 +9,10 @@ export const Item = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
   quantity: Schema.Number,
+  // An image link, shop links, and a note from the owner. All optional.
+  photo: Schema.optional(Schema.String),
+  links: Schema.Array(Schema.String),
+  note: Schema.optional(Schema.String),
   // Only guests see this. "2 of 5 left" would spoil the owner.
   remaining: Schema.optional(Schema.Number),
 });
@@ -24,6 +28,12 @@ export type ListView = typeof ListView.Type;
 const Text = (maxLength: number) =>
   Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(maxLength));
 
+// Links are rendered as href and src, so only http(s) gets through.
+const Url = Schema.Trim.check(
+  Schema.isMaxLength(2000),
+  Schema.isPattern(/^https?:\/\/[^\s/?#]+\S*$/i),
+);
+
 // Body of POST /api/lists.
 export const NewList = Schema.Struct({
   title: Text(100),
@@ -31,6 +41,9 @@ export const NewList = Schema.Struct({
     Schema.Struct({
       title: Text(200),
       quantity: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 99 })),
+      photo: Schema.optionalKey(Url),
+      links: Schema.optionalKey(Schema.Array(Url).check(Schema.isMaxLength(5))),
+      note: Schema.optionalKey(Text(500)),
     }),
   ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 });

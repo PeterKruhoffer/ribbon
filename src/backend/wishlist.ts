@@ -37,6 +37,11 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
       yield* sql.exec(
         "CREATE TABLE IF NOT EXISTS item (id TEXT PRIMARY KEY, title TEXT NOT NULL, quantity INTEGER NOT NULL, position INTEGER NOT NULL)",
       );
+      // A wish's photo, links (a JSON array), and note. A table of its own, so
+      // lists made before wishes had details need no migration.
+      yield* sql.exec(
+        "CREATE TABLE IF NOT EXISTS item_detail (item_id TEXT PRIMARY KEY, photo TEXT, links TEXT NOT NULL, note TEXT)",
+      );
       yield* sql.exec(
         "CREATE TABLE IF NOT EXISTS claim (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, guest TEXT NOT NULL)",
       );
@@ -83,13 +88,23 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           yield* sql.exec("INSERT INTO meta VALUES ('title', ?)", list.title);
           yield* sql.exec("INSERT INTO meta VALUES ('owner', ?)", owner);
           for (const [position, item] of list.items.entries()) {
+            const id = crypto.randomUUID();
             yield* sql.exec(
               "INSERT INTO item VALUES (?, ?, ?, ?)",
-              crypto.randomUUID(),
+              id,
               item.title,
               item.quantity,
               position,
             );
+            const links = item.links ?? [];
+            if (item.photo || item.note || links.length > 0)
+              yield* sql.exec(
+                "INSERT INTO item_detail VALUES (?, ?, ?, ?)",
+                id,
+                item.photo ?? null,
+                JSON.stringify(links),
+                item.note ?? null,
+              );
           }
         }),
 
@@ -103,18 +118,25 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
             id: string;
             title: string;
             quantity: number;
+            photo: string | null;
+            links: string | null;
+            note: string | null;
             claimed: number;
           }>(
-            "SELECT item.id, item.title, item.quantity, COUNT(claim.id) AS claimed FROM item LEFT JOIN claim ON claim.item_id = item.id GROUP BY item.id ORDER BY item.position",
+            "SELECT item.id, item.title, item.quantity, d.photo, d.links, d.note, COUNT(claim.id) AS claimed FROM item LEFT JOIN item_detail d ON d.item_id = item.id LEFT JOIN claim ON claim.item_id = item.id GROUP BY item.id ORDER BY item.position",
           )).toArray();
           const view: ListView = {
             title: meta.value,
             role,
-            items: rows.map(({ id, title, quantity, claimed }) =>
-              role === "owner"
-                ? { id, title, quantity }
-                : { id, title, quantity, remaining: quantity - claimed },
-            ),
+            items: rows.map(({ id, title, quantity, photo, links, note, claimed }) => ({
+              id,
+              title,
+              quantity,
+              ...(photo === null ? {} : { photo }),
+              links: links === null ? [] : (JSON.parse(links) as string[]),
+              ...(note === null ? {} : { note }),
+              ...(role === "owner" ? {} : { remaining: quantity - claimed }),
+            })),
           };
           return view;
         }),

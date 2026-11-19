@@ -55,7 +55,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
               Effect.catchTag("SchemaError", () =>
                 Effect.succeed(
                   HttpServerResponse.text(
-                    "Expected { title, items: [{ title, quantity }] } with 1 to 50 items",
+                    "Check the list: 1 to 50 wishes, each with a name, up to 5 links and a photo link starting with https://, and a note of up to 500 characters",
                     { status: 400 },
                   ),
                 ),

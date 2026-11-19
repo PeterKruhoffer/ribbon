@@ -7,7 +7,7 @@ import { entityTopic } from "../live/protocol.ts";
 import type { ListView } from "../shared/wishlist.ts";
 import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Page, readError, Ribbon, row, Tag, ui } from "../ui/kit.tsx";
-import { color } from "../ui/tokens.stylex.ts";
+import { color, figure } from "../ui/tokens.stylex.ts";
 
 // One list. Guests claim items, and a claim in one guest tab updates the
 // others live; the owner sees the share link and receives no claim events.
@@ -158,33 +158,49 @@ function ListPage() {
           {list.items.map((item) => {
             const taken = item.remaining === 0;
             return (
-              <li key={item.id} data-item={item.id} {...stylex.props(row.base)}>
+              <li key={item.id} data-item={item.id} {...stylex.props(row.base, s.item)}>
                 {!owner && taken && (
-                  <span {...stylex.props(row.tag)}>
+                  <span {...stylex.props(row.tag, s.tag)}>
                     <Tag swing={!takenIds.has(item.id)} />
                   </span>
                 )}
-                <span {...stylex.props(s.name, taken && ui.soft)}>{item.title}</span>
-                {owner ? (
-                  <span {...stylex.props(s.meta)}>wants {item.quantity}</span>
-                ) : (
-                  <>
-                    <span data-remaining {...stylex.props(s.meta)}>
-                      {item.remaining} of {item.quantity} left
-                    </span>
-                    {taken ? (
-                      <span {...stylex.props(s.taken)}>Taken</span>
-                    ) : (
-                      <button
-                        disabled={claiming !== undefined}
-                        onClick={() => void claim(item.id, item.title)}
-                        {...stylex.props(ui.button)}
-                      >
-                        Claim
-                      </button>
-                    )}
-                  </>
-                )}
+                <div {...stylex.props(s.head)}>
+                  {item.photo && (
+                    <img
+                      src={item.photo}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={(event) => (event.currentTarget.hidden = true)}
+                      {...stylex.props(s.photo)}
+                    />
+                  )}
+                  <span {...stylex.props(s.name, taken && ui.soft)}>{item.title}</span>
+                </div>
+                {item.note && <Note text={item.note} />}
+                {item.links.length > 0 && <Shops links={item.links} />}
+                <div {...stylex.props(s.foot)}>
+                  {owner ? (
+                    <span {...stylex.props(s.meta)}>wants {item.quantity}</span>
+                  ) : (
+                    <>
+                      <span data-remaining {...stylex.props(s.meta)}>
+                        {item.remaining} of {item.quantity} left
+                      </span>
+                      {taken ? (
+                        <span {...stylex.props(s.taken)}>Taken</span>
+                      ) : (
+                        <button
+                          disabled={claiming !== undefined}
+                          onClick={() => void claim(item.id, item.title)}
+                          {...stylex.props(ui.button)}
+                        >
+                          Claim
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </li>
             );
           })}
@@ -211,19 +227,159 @@ function ListPage() {
   );
 }
 
+// The owner's note, cut off after three lines with a button to read the rest.
+function Note({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useEffect(() => {
+    const note = ref.current;
+    if (!note || open) return;
+    const measure = () => setLong(note.scrollHeight > note.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(note);
+    return () => observer.disconnect();
+  }, [open, text]);
+  return (
+    <div {...stylex.props(s.noteWrap)}>
+      <p ref={ref} {...stylex.props(s.note, !open && s.clamp)}>
+        {text}
+      </p>
+      {long && (
+        <button onClick={() => setOpen(!open)} {...stylex.props(s.more)}>
+          {open ? "Show less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+const host = (link: string) => {
+  try {
+    return new URL(link).hostname.replace(/^www\./, "");
+  } catch {
+    return link;
+  }
+};
+
+// Shop links as chips. More than three show the first two and a button for the rest.
+function Shops({ links }: { links: readonly string[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = open || links.length <= 3 ? links : links.slice(0, 2);
+  return (
+    <div {...stylex.props(s.shops)}>
+      <span {...stylex.props(s.label)}>Where to buy it</span>
+      <div {...stylex.props(s.chips)}>
+        {shown.map((link, i) => (
+          <a
+            key={i}
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            {...stylex.props(s.chip)}
+          >
+            {host(link)} ↗
+          </a>
+        ))}
+        {shown.length < links.length && (
+          <button onClick={() => setOpen(true)} {...stylex.props(s.chip, s.moreChip)}>
+            +{links.length - shown.length} more
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const MOBILE = "@media (max-width: 480px)";
 
 const s = stylex.create({
   share: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 32 },
   shareField: { flex: "1 1 240px", fontSize: 14 },
   list: { listStyle: "none", margin: 0, padding: 0 },
-  name: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
+  // Roomy rows: the photo sits beside the name only, so the note and links get
+  // the full width, and Claim gets a line of its own at the bottom.
+  item: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 14,
+    paddingBlock: 20,
+  },
+  tag: { top: 14, marginTop: 0 },
+  head: { display: "flex", alignItems: "center", gap: 14, minWidth: 0 },
+  photo: {
+    width: { default: 80, [MOBILE]: 56 },
+    height: { default: 80, [MOBILE]: 56 },
+    flexShrink: 0,
+    objectFit: "cover",
+    borderRadius: 8,
+    backgroundColor: figure.wash,
+  },
+  name: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 17,
+    fontWeight: 500,
+    lineHeight: 1.35,
+    overflowWrap: "break-word",
+  },
+  noteWrap: { display: "grid", gap: 4, justifyItems: "start" },
+  note: {
+    margin: 0,
+    fontSize: 15,
+    lineHeight: 1.6,
+    color: color.ink,
+    maxWidth: "60ch",
+    textWrap: "pretty",
+    whiteSpace: "pre-line",
+    overflowWrap: "break-word",
+  },
+  clamp: {
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+  more: {
+    padding: 0,
+    fontSize: 14,
+    fontWeight: 500,
+    color: { default: color.ribbon, ":hover": color.ribbonDark },
+    backgroundColor: "transparent",
+    borderStyle: "none",
+    borderRadius: 4,
+    cursor: "pointer",
+    outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+    outlineOffset: 2,
+  },
+  shops: { display: "grid", gap: 8 },
+  label: { fontSize: 13, color: color.soft },
+  chips: { display: "flex", flexWrap: "wrap", gap: 6 },
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    paddingBlock: 3,
+    paddingInline: 11,
+    fontSize: 14,
+    color: color.ribbon,
+    backgroundColor: { default: "transparent", ":hover": "#f7e9eb" },
+    borderStyle: "none",
+    borderRadius: 999,
+    boxShadow: `inset 0 0 0 1px ${color.line}`,
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    outline: { default: "none", ":focus-visible": `2px solid ${color.focus}` },
+    outlineOffset: 2,
+  },
+  moreChip: { color: color.soft },
+  foot: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
   meta: {
     fontSize: 14,
     color: color.soft,
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
-    display: { default: null, [MOBILE]: "none" },
   },
   taken: { minWidth: 76, fontSize: 15, color: color.soft, textAlign: "center" },
   footer: { display: "grid", gap: 6, marginTop: 24 },
