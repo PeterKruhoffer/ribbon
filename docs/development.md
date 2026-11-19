@@ -52,11 +52,13 @@ Alchemy's state lives in the account's Cloudflare state store, so CI and local d
 
 Repository secrets, under Settings, Secrets and variables, Actions:
 
-| Secret                  | Value                                                                                              |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | A Cloudflare API token that can deploy Workers, edit R2, and read the account's Secrets Store.     |
-| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account id.                                                                         |
-| `CLERK_SECRET_KEY`      | The Clerk development instance's secret key (`sk_test_...`). Without it, `verify:live` is skipped. |
+| Secret                  | Value                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | A Cloudflare API token with Workers Scripts Write, Workers R2 Storage Write, Secrets Store Write, and Account Settings Read. |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account id.                                                                                                   |
+| `CLERK_SECRET_KEY`      | The Clerk development instance's secret key (`sk_test_...`). Without it, `verify:live` is skipped.                           |
+
+The token needs Secrets Store Write even though CI only reads: without cached credentials, Alchemy reads its state store token through a preview Worker that binds a Secrets Store secret. Without it, the deploy fails with "Edge-preview secret read failed".
 
 `scripts/owner-token.mjs` uses the secret key to sign in the test user `ci+clerk_test@example.com` and prints a session token for `verify:live`. Clerk only allows this on development instances. Each run leaves one verify list in `prod`.
 
