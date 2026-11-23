@@ -102,7 +102,7 @@ export function ListEditor({
     const body = await shrink(file).catch(() => undefined);
     if (body === undefined) {
       update({ uploading: false });
-      return setError("That file isn't a photo this browser can read. Try a JPEG or PNG.");
+      return setError("Filen er ikke et billede, som browseren kan læse. Prøv en JPEG eller PNG.");
     }
     const response = await fetch("/api/photos", {
       method: "POST",
@@ -111,7 +111,7 @@ export function ListEditor({
     }).catch(() => undefined);
     if (!response?.ok) {
       update({ uploading: false });
-      return setError(response ? await readError(response) : "Couldn't upload the photo.");
+      return setError(response ? await readError(response) : "Billedet kunne ikke uploades.");
     }
     const uploaded = decodeUploaded(await response.json());
     if (Option.isNone(uploaded)) {
@@ -128,7 +128,7 @@ export function ListEditor({
     if (
       item.id !== undefined &&
       !confirm(
-        `Remove "${item.title}"? Guests may already have claimed it. Their claim goes too, and you won't see whether there was one.`,
+        `Fjern "${item.title}"? Gæster kan allerede have reserveret det. Reservationen forsvinder også, og du får ikke at vide, om der var en.`,
       )
     )
       return;
@@ -147,7 +147,7 @@ export function ListEditor({
         links: links.map((link) => link.trim()).filter((link) => link !== ""),
         note: note?.trim() || undefined,
       }));
-    if (wishes.length === 0) return setError("Add at least one wish.");
+    if (wishes.length === 0) return setError("Tilføj mindst ét ønske.");
     setError(undefined);
     setSaving(true);
     const failed = await onSubmit({ title, items: wishes });
@@ -158,33 +158,33 @@ export function ListEditor({
   return (
     <form onSubmit={(event) => void save(event)} {...stylex.props(s.form)}>
       <label {...stylex.props(s.label)}>
-        List name
+        Listens navn
         <input
           name="title"
           required
           maxLength={100}
           value={title}
-          placeholder="Peter's birthday"
+          placeholder="Peters fødselsdag"
           onChange={(event) => setTitle(event.target.value)}
           {...stylex.props(ui.field)}
         />
       </label>
       <fieldset {...stylex.props(s.fieldset)}>
-        <legend {...stylex.props(s.legend)}>Wishes</legend>
+        <legend {...stylex.props(s.legend)}>Ønsker</legend>
         <Ribbon>
           {items.map((item, index) => (
             <div key={item.key} data-draft-item {...stylex.props(row.base, s.draft)}>
               <div {...stylex.props(s.line)}>
                 <input
-                  aria-label={`Wish ${index + 1}`}
+                  aria-label={`Ønske ${index + 1}`}
                   maxLength={200}
                   value={item.title}
-                  placeholder="Wool socks"
+                  placeholder="Uldsokker"
                   onChange={(event) => update(index, { title: event.target.value })}
                   {...stylex.props(ui.field, s.wish)}
                 />
                 <input
-                  aria-label={`How many of wish ${index + 1}`}
+                  aria-label={`Antal af ønske ${index + 1}`}
                   type="number"
                   min={1}
                   max={99}
@@ -194,7 +194,7 @@ export function ListEditor({
                 />
                 <button
                   type="button"
-                  aria-label={`Remove wish ${index + 1}`}
+                  aria-label={`Fjern ønske ${index + 1}`}
                   disabled={items.length === 1}
                   onClick={() => remove(index)}
                   {...stylex.props(ui.iconButton)}
@@ -215,25 +215,25 @@ export function ListEditor({
                     />
                   )}
                   {uploaded(item.photo) ? (
-                    <span {...stylex.props(s.wish, s.uploaded)}>Uploaded photo</span>
+                    <span {...stylex.props(s.wish, s.uploaded)}>Uploadet billede</span>
                   ) : (
                     <>
                       <input
                         type="url"
                         pattern={urlPattern}
-                        aria-label={`Photo link for wish ${index + 1}`}
+                        aria-label={`Billedlink til ønske ${index + 1}`}
                         maxLength={2000}
                         value={item.photo}
-                        placeholder="Photo link, https://…"
+                        placeholder="Billedlink, https://…"
                         onChange={(event) => update(index, { photo: event.target.value })}
                         {...stylex.props(ui.field, s.wish, s.detail)}
                       />
                       <label {...stylex.props(s.addDetail, s.pick, item.uploading && s.busy)}>
-                        {item.uploading ? "Uploading…" : "Upload"}
+                        {item.uploading ? "Uploader…" : "Upload"}
                         <input
                           type="file"
                           accept="image/*"
-                          aria-label={`Upload a photo for wish ${index + 1}`}
+                          aria-label={`Upload et billede til ønske ${index + 1}`}
                           disabled={item.uploading}
                           onChange={(event) => {
                             const file = event.target.files?.[0];
@@ -247,7 +247,7 @@ export function ListEditor({
                   )}
                   <button
                     type="button"
-                    aria-label={`Remove photo from wish ${index + 1}`}
+                    aria-label={`Fjern billedet fra ønske ${index + 1}`}
                     disabled={item.uploading}
                     onClick={() => update(index, { photo: undefined })}
                     {...stylex.props(ui.iconButton)}
@@ -261,10 +261,10 @@ export function ListEditor({
                   <input
                     type="url"
                     pattern={urlPattern}
-                    aria-label={`Link ${j + 1} for wish ${index + 1}`}
+                    aria-label={`Link ${j + 1} til ønske ${index + 1}`}
                     maxLength={2000}
                     value={link}
-                    placeholder="Shop link, https://…"
+                    placeholder="Butikslink, https://…"
                     onChange={(event) =>
                       update(index, {
                         links: item.links.map((l, k) => (k === j ? event.target.value : l)),
@@ -274,7 +274,7 @@ export function ListEditor({
                   />
                   <button
                     type="button"
-                    aria-label={`Remove link ${j + 1} from wish ${index + 1}`}
+                    aria-label={`Fjern link ${j + 1} fra ønske ${index + 1}`}
                     onClick={() => update(index, { links: item.links.filter((_, k) => k !== j) })}
                     {...stylex.props(ui.iconButton)}
                   >
@@ -284,11 +284,11 @@ export function ListEditor({
               ))}
               {item.note !== undefined && (
                 <textarea
-                  aria-label={`Note for wish ${index + 1}`}
+                  aria-label={`Note til ønske ${index + 1}`}
                   maxLength={500}
                   rows={3}
                   value={item.note}
-                  placeholder="Size, colour, anything guests should know"
+                  placeholder="Størrelse, farve, alt hvad gæsterne skal vide"
                   onChange={(event) => update(index, { note: event.target.value })}
                   {...stylex.props(ui.field, s.note)}
                 />
@@ -300,7 +300,7 @@ export function ListEditor({
                     onClick={() => update(index, { photo: "" })}
                     {...stylex.props(s.addDetail)}
                   >
-                    + Photo
+                    + Billede
                   </button>
                 )}
                 <button
@@ -330,7 +330,7 @@ export function ListEditor({
               onClick={() => setItems((current) => [...current, emptyItem()])}
               {...stylex.props(ui.button, ui.quiet)}
             >
-              Add a wish
+              Tilføj et ønske
             </button>
           </div>
         </Ribbon>
@@ -350,7 +350,7 @@ export function ListEditor({
             onClick={onCancel}
             {...stylex.props(ui.button, ui.quiet)}
           >
-            Cancel
+            Annullér
           </button>
         )}
         {error && (

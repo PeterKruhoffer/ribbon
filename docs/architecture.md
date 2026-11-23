@@ -59,9 +59,9 @@ Limits: titles 1 to 100 characters after trimming, 1 to 50 items, item titles up
 
 Uploads take JPEG, PNG, GIF, or WebP up to 5 MB. The Backend reads the type from the file's first bytes and serves it with `nosniff`, so nothing but a raster image is served from Ribbon's origin. Before uploading, the browser redraws the photo as a JPEG of at most 1600 px, which drops location data and keeps phone photos far under the limit. A photo no saved wish uses, because its list was never created or an edit replaced or removed it, stays in the bucket; nothing cleans those up yet.
 
-The list page shows each wish as a roomy row: the photo beside the name, then the note (cut off after three lines with Read more), the shop links (two plus "+N more" when there are more than three), and Claim on its own line. Both the owner and guests see the details; only guests see claim counts.
+The list page shows each wish as a roomy row: the photo beside the name, then the note (cut off after three lines with "Læs mere"), the shop links (two plus "+N mere" when there are more than three), and "Reservér" (claim) on its own line. Both the owner and guests see the details; only guests see claim counts.
 
-The owner's "Edit list" button swaps the page for the same form `/new` uses (`src/ui/editor.tsx`), filled in. Removing a saved wish asks first, because the owner cannot see whether a guest claimed it. Lowering a quantity below its claims keeps the claims, and guests see 0 left.
+The owner's "Redigér liste" (edit list) button swaps the page for the same form `/new` uses (`src/ui/editor.tsx`), filled in. Removing a saved wish asks first, because the owner cannot see whether a guest claimed it. Lowering a quantity below its claims keeps the claims, and guests see 0 left.
 
 The list id is a random UUID, and the share link is `/lists/:listId`. The owner and guests open the same link; the owner's token makes the Backend answer with the owner view.
 

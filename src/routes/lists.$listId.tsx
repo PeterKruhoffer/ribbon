@@ -127,18 +127,18 @@ function ListPage() {
     return (
       <Page>
         <WrappedGift style={s.waiting} />
-        <p {...stylex.props(ui.small)}>Opening the list…</p>
+        <p {...stylex.props(ui.small)}>Åbner listen…</p>
       </Page>
     );
   if (list === "missing")
     return (
       <Page>
         <OpenBox style={s.missing} />
-        <h1 {...stylex.props(ui.title)}>List not found</h1>
+        <h1 {...stylex.props(ui.title)}>Listen blev ikke fundet</h1>
         <p {...stylex.props(ui.sub)}>
-          Check the link, or{" "}
+          Tjek linket, eller{" "}
           <a href="/" {...stylex.props(ui.link)}>
-            make a new list
+            lav en ny liste
           </a>
           .
         </p>
@@ -155,14 +155,15 @@ function ListPage() {
   if (owner && editing)
     return (
       <Page>
-        <h1 {...stylex.props(ui.title)}>Edit your list</h1>
+        <h1 {...stylex.props(ui.title)}>Redigér din liste</h1>
         <p {...stylex.props(ui.sub)}>
-          Guests see your changes right away. Wishes keep their claims unless you remove them.
+          Gæsterne ser dine ændringer med det samme. Ønsker beholder deres reservationer, medmindre
+          du fjerner dem.
         </p>
         <ListEditor
           initial={{ title: list.title, items: draftsOf(list) }}
-          submit="Save changes"
-          submitting="Saving…"
+          submit="Gem ændringer"
+          submitting="Gemmer…"
           onSubmit={save}
           onCancel={() => setEditing(false)}
         />
@@ -173,14 +174,14 @@ function ListPage() {
       <h1 {...stylex.props(ui.title)}>{list.title}</h1>
       <p {...stylex.props(ui.sub)}>
         {owner
-          ? "Your list. Guests see what is still free, and you never see who claimed what."
-          : "Claim a gift so nobody else buys the same one. The list's owner never sees who claimed what."}
+          ? "Din liste. Gæsterne ser, hvad der stadig er ledigt, og du ser aldrig, hvem der har reserveret hvad."
+          : "Reservér en gave, så ingen andre køber den samme. Listens ejer ser aldrig, hvem der har reserveret hvad."}
       </p>
       {owner && (
         <div {...stylex.props(s.share)}>
           <input
             readOnly
-            aria-label="Share link"
+            aria-label="Delingslink"
             value={shareUrl}
             onFocus={(event) => event.target.select()}
             {...stylex.props(ui.field, s.shareField)}
@@ -190,10 +191,10 @@ function ListPage() {
             onClick={() => void navigator.clipboard.writeText(shareUrl).then(() => setCopied(true))}
             {...stylex.props(ui.button)}
           >
-            {copied ? "Copied" : "Copy share link"}
+            {copied ? "Kopieret" : "Kopiér delingslink"}
           </button>
           <button onClick={() => setEditing(true)} {...stylex.props(ui.button, ui.quiet)}>
-            Edit list
+            Redigér liste
           </button>
         </div>
       )}
@@ -225,21 +226,21 @@ function ListPage() {
                 {item.links.length > 0 && <Shops links={item.links} />}
                 <div {...stylex.props(s.foot)}>
                   {owner ? (
-                    <span {...stylex.props(s.meta)}>wants {item.quantity}</span>
+                    <span {...stylex.props(s.meta)}>ønsker {item.quantity}</span>
                   ) : (
                     <>
                       <span data-remaining {...stylex.props(s.meta)}>
-                        {item.remaining} of {item.quantity} left
+                        {item.remaining} af {item.quantity} tilbage
                       </span>
                       {taken ? (
-                        <span {...stylex.props(s.taken)}>Taken</span>
+                        <span {...stylex.props(s.taken)}>Reserveret</span>
                       ) : (
                         <button
                           disabled={claiming !== undefined}
                           onClick={() => void claim(item.id, item.title)}
                           {...stylex.props(ui.button)}
                         >
-                          Claim
+                          Reservér
                         </button>
                       )}
                     </>
@@ -261,8 +262,8 @@ function ListPage() {
             {claimed && <ClaimGift key={claimed.id} style={s.claimFigure} />}
             <p aria-live="polite" data-events={events} {...stylex.props(ui.small)}>
               {claimed
-                ? `You claimed ${claimed.title}. Other guests see it now.`
-                : "Claims show up for every guest right away."}
+                ? `Du har reserveret ${claimed.title}. De andre gæster kan se det nu.`
+                : "Reservationer vises for alle gæster med det samme."}
             </p>
           </div>
         </div>
@@ -292,7 +293,7 @@ function Note({ text }: { text: string }) {
       </p>
       {long && (
         <button onClick={() => setOpen(!open)} {...stylex.props(s.more)}>
-          {open ? "Show less" : "Read more"}
+          {open ? "Vis mindre" : "Læs mere"}
         </button>
       )}
     </div>
@@ -313,7 +314,7 @@ function Shops({ links }: { links: readonly string[] }) {
   const shown = open || links.length <= 3 ? links : links.slice(0, 2);
   return (
     <div {...stylex.props(s.shops)}>
-      <span {...stylex.props(s.label)}>Where to buy it</span>
+      <span {...stylex.props(s.label)}>Hvor kan den købes</span>
       <div {...stylex.props(s.chips)}>
         {shown.map((link, i) => (
           <a
@@ -328,7 +329,7 @@ function Shops({ links }: { links: readonly string[] }) {
         ))}
         {shown.length < links.length && (
           <button onClick={() => setOpen(true)} {...stylex.props(s.chip, s.moreChip)}>
-            +{links.length - shown.length} more
+            +{links.length - shown.length} mere
           </button>
         )}
       </div>

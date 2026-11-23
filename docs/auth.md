@@ -10,7 +10,7 @@ Owners sign in with [Clerk](https://clerk.com). Guests never need an account: th
 
 ## Pages
 
-The landing page (`/`) has no form. Its "Make a wish list" button and the header's Sign in both open the Clerk modal and go to `/new` after sign-in; a signed-in visitor's button links straight there. `/new` holds the create form and shows a sign-in prompt to signed-out visitors. Signing in from a list page stays on that page, so a guest who owns the list reloads it as the owner.
+The landing page (`/`) has no form. Its "Lav en ønskeliste" (make a wish list) button and the header's "Log ind" (sign in) both open the Clerk modal and go to `/new` after sign-in; a signed-in visitor's button links straight there. `/new` holds the create form and shows a sign-in prompt to signed-out visitors. Signing in from a list page stays on that page, so a guest who owns the list reloads it as the owner.
 
 ## How a request is checked
 

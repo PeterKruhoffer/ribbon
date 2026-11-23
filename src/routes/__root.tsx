@@ -1,3 +1,4 @@
+import { daDK } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/react";
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouter } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
@@ -12,7 +13,7 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Ribbon" },
-      { name: "description", content: "Shared gift wish lists without spoilers." },
+      { name: "description", content: "Delte ønskelister uden spoilere." },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -26,7 +27,7 @@ export const Route = createRootRoute({
 function RootDocument() {
   const router = useRouter();
   return (
-    <html lang="en">
+    <html lang="da">
       <head>
         <HeadContent />
       </head>
@@ -39,6 +40,7 @@ function RootDocument() {
           publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
           routerPush={(href) => router.navigate({ href })}
           routerReplace={(href) => router.navigate({ href, replace: true })}
+          localization={daDK}
           appearance={{ variables: { colorPrimary: "#b0243a" } }}
         >
           <Outlet />

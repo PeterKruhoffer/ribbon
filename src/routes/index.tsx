@@ -16,20 +16,20 @@ function Home() {
       <div {...stylex.props(s.hero)}>
         <GiftTable style={s.heroFigure} />
         <div>
-          <h1 {...stylex.props(ui.title)}>Make a wish list</h1>
+          <h1 {...stylex.props(ui.title)}>Lav en ønskeliste</h1>
           <p {...stylex.props(ui.sub)}>
-            Share the link, and guests claim gifts so nobody buys the same one twice. You never see
-            who claimed what.
+            Del linket, så reserverer gæsterne gaver, og ingen køber den samme to gange. Du ser
+            aldrig, hvem der har reserveret hvad.
           </p>
           <Show when="signed-in">
             <Link to="/new" {...stylex.props(ui.button, s.cta)}>
-              Make a wish list
+              Lav en ønskeliste
             </Link>
           </Show>
           <Show when="signed-out">
             <SignInButton mode="modal" forceRedirectUrl="/new" signUpForceRedirectUrl="/new">
               <button type="button" {...stylex.props(ui.button)}>
-                Make a wish list
+                Lav en ønskeliste
               </button>
             </SignInButton>
           </Show>
@@ -38,28 +38,28 @@ function Home() {
 
       <section aria-labelledby="how" {...stylex.props(s.section)}>
         <h2 id="how" {...stylex.props(s.heading)}>
-          How Ribbon works
+          Sådan virker Ribbon
         </h2>
         <ol {...stylex.props(s.steps)}>
           <li {...stylex.props(s.step)}>
             <WishCard style={s.stepFigure} />
             <p {...stylex.props(s.stepText)}>
-              Write the wishes
-              <span {...stylex.props(ui.small)}>Socks, a board game, anything.</span>
+              Skriv ønskerne
+              <span {...stylex.props(ui.small)}>Sokker, et brætspil, hvad som helst.</span>
             </p>
           </li>
           <li {...stylex.props(s.step)}>
             <ShareLink style={s.stepFigure} />
             <p {...stylex.props(s.stepText)}>
-              Share the link
-              <span {...stylex.props(ui.small)}>One link for every guest.</span>
+              Del linket
+              <span {...stylex.props(ui.small)}>Ét link til alle gæster.</span>
             </p>
           </li>
           <li {...stylex.props(s.step)}>
             <ClaimedGift style={s.stepFigure} />
             <p {...stylex.props(s.stepText)}>
-              Guests claim
-              <span {...stylex.props(ui.small)}>Every guest sees it live.</span>
+              Gæsterne reserverer
+              <span {...stylex.props(ui.small)}>Alle gæster ser det med det samme.</span>
             </p>
           </li>
         </ol>
@@ -67,24 +67,24 @@ function Home() {
 
       <section aria-labelledby="spoilers" {...stylex.props(s.section)}>
         <h2 id="spoilers" {...stylex.props(s.heading)}>
-          Your surprise stays a surprise
+          Din overraskelse forbliver en overraskelse
         </h2>
         <p {...stylex.props(ui.sub)}>
-          Guests see which gifts are taken. You see the same list with no bows, ever.
+          Gæsterne ser, hvilke gaver der er taget. Du ser den samme liste helt uden sløjfer.
         </p>
         <div {...stylex.props(s.pair)}>
           <figure {...stylex.props(s.view)}>
             <SpoilerTable guest={false} style={s.spoilerFigure} />
             <figcaption {...stylex.props(s.stepText)}>
-              Your view
-              <span {...stylex.props(ui.small)}>Wishes, no claims</span>
+              Din visning
+              <span {...stylex.props(ui.small)}>Ønsker, ingen reservationer</span>
             </figcaption>
           </figure>
           <figure {...stylex.props(s.view)}>
             <SpoilerTable guest style={s.spoilerFigure} />
             <figcaption {...stylex.props(s.stepText)}>
-              Guest view
-              <span {...stylex.props(ui.small)}>A bow on every claimed gift</span>
+              Gæstens visning
+              <span {...stylex.props(ui.small)}>En sløjfe på hver reserveret gave</span>
             </figcaption>
           </figure>
         </div>

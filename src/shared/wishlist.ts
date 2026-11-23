@@ -75,7 +75,8 @@ export const CreatedList = Schema.Struct({ listId: Schema.String });
 export const UploadedPhoto = Schema.Struct({ photo: Schema.String });
 
 // The browser shows this when an answer from the Backend doesn't match its schema.
-export const unreadableAnswer = "Ribbon's server sent an answer this page can't read. Try again.";
+export const unreadableAnswer =
+  "Ribbons server sendte et svar, som siden ikke kan læse. Prøv igen.";
 
 // Failures the Backend answers with, each with its HTTP status. The browser
 // turns the tag into words (readError in src/ui/kit.tsx).

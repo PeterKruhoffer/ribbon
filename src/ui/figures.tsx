@@ -318,7 +318,7 @@ export function GiftTable({ style }: FigureProps) {
           "ribbon",
           1,
         );
-        d.tag(1, 11, 0.02, 5.6, "NO SPOILERS");
+        d.tag(1, 11, 0.02, 6.9, "INGEN SPOILERE");
         d.gift(1.5, 0.8, 0.9, 4.2, 3.6, 3.4, { faces: PINK, bow: [f.pop, f.first] });
         d.gift(8, 0.8, 0.9, 3.2, 3.2, 5.2, { bow: [f.pop, f.second] });
         d.card(1.5, 7.2, 0.9, 5.2, 4.4, [true, true, false]);
@@ -395,7 +395,7 @@ export function ClaimedGift({ style }: FigureProps) {
       style={style}
       draw={(d) => {
         d.box(0, 0, 0, 8, 6, 0.7);
-        d.tag(0.6, 6, 0.02, 3.6, "CLAIMED", "pale");
+        d.tag(0.6, 6, 0.02, 5.1, "RESERVERET", "pale");
         d.gift(2, 1.2, 0.7, 4, 3.4, 3.2, { faces: PINK, bow: true, scale: 0.6 });
       }}
     />
@@ -417,8 +417,8 @@ export function SpoilerTable({ guest, style }: FigureProps & { guest: boolean })
           0.8,
           8,
           0.02,
-          guest ? 5.4 : 4.4,
-          guest ? "GUESTS SEE" : "YOU SEE",
+          guest ? 5.4 : 3.6,
+          guest ? "GÆSTER SER" : "DU SER",
           guest ? "pale" : "sheet",
         );
         d.gift(1, 0.8, 0.8, 3.6, 3, 3, {
@@ -442,7 +442,7 @@ export function OpenBox({ style }: FigureProps) {
       style={style}
       draw={(d) => {
         d.box(0, 0, 0, 15, 11, 0.8);
-        d.tag(8.5, 11, 0.02, 5, "NOT FOUND");
+        d.tag(8.5, 11, 0.02, 5.6, "IKKE FUNDET");
         const [x, y, z, w, depth, h, i] = [1.5, 1.2, 0.8, 4.6, 4, 3.4, 0.25];
         const t = z + h;
         d.box(x, y, z, w, depth, h, PINK);

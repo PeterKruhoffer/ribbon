@@ -2,7 +2,9 @@
 
 The Ribbon look puts a white sheet on warm paper and uses one ribbon red. A red ribbon runs down every list, and a white gift tag with a small bow hangs on it for each gift that guests have fully claimed. The tag swings in when a gift becomes taken while a guest has the page open; gifts already taken when the page loads hang still. The owner sees the ribbon without tags, so the page never spoils who claimed what.
 
-Hand-drawn isometric figures of gift boxes, a wish card, and a phone illustrate the landing page (hero, "How Ribbon works", and the spoiler promise), the loading and "List not found" states, and a guest's claim, where a small gift gets its ribbon and bow. `src/ui/figures.tsx` draws them as inline SVG in shades of the ribbon red from the `figure` tokens, so they scale to any width and change with the tokens. To add one, draw it with the `Draw` helpers there instead of adding an image file.
+Hand-drawn isometric figures of gift boxes, a wish card, and a phone illustrate the landing page (hero, "Sådan virker Ribbon", and the spoiler promise), the loading and "Listen blev ikke fundet" states, and a guest's claim, where a small gift gets its ribbon and bow. `src/ui/figures.tsx` draws them as inline SVG in shades of the ribbon red from the `figure` tokens, so they scale to any width and change with the tokens. To add one, draw it with the `Draw` helpers there instead of adding an image file.
+
+Ribbon is in Danish. Write every string people see in Danish, including `aria-label`s, error messages in `readError` (`src/ui/kit.tsx`), and the labels in the figures; a figure's `tag` width is set by hand, so widen it when its label grows. Clerk's sign-in modal and account menu use `daDK` from `@clerk/localizations`, set on `ClerkProvider` in `src/routes/__root.tsx`. A guest claims ("reserverer") a gift. Code, comments, and docs stay in English.
 
 Titles use Literata and everything else uses Figtree. Both fonts are self-hosted from `@fontsource-variable`, so the site never loads fonts from a CDN.
 

@@ -34,13 +34,13 @@ function NewList() {
   if (!isSignedIn)
     return (
       <Page>
-        <h1 {...stylex.props(ui.title)}>Make a wish list</h1>
+        <h1 {...stylex.props(ui.title)}>Lav en ønskeliste</h1>
         <p {...stylex.props(ui.sub)}>
-          Sign in to make a list, so only you open it as the owner. Guests need no account.
+          Log ind for at lave en liste, så kun du åbner den som ejer. Gæster behøver ingen konto.
         </p>
         <SignInButton mode="modal">
           <button type="button" {...stylex.props(ui.button)}>
-            Sign in
+            Log ind
           </button>
         </SignInButton>
       </Page>
@@ -48,9 +48,9 @@ function NewList() {
 
   return (
     <Page>
-      <h1 {...stylex.props(ui.title)}>Make a wish list</h1>
-      <p {...stylex.props(ui.sub)}>Name the list, add the wishes, and share the link.</p>
-      <ListEditor submit="Create list" submitting="Creating…" onSubmit={create} />
+      <h1 {...stylex.props(ui.title)}>Lav en ønskeliste</h1>
+      <p {...stylex.props(ui.sub)}>Giv listen et navn, tilføj ønskerne, og del linket.</p>
+      <ListEditor submit="Opret liste" submitting="Opretter…" onSubmit={create} />
     </Page>
   );
 }

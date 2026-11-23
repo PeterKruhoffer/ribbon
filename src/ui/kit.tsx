@@ -38,7 +38,7 @@ export function Page({
               forceRedirectUrl={afterSignIn}
               signUpForceRedirectUrl={afterSignIn}
             >
-              <button {...stylex.props(ui.button, ui.quiet, s.signIn)}>Sign in</button>
+              <button {...stylex.props(ui.button, ui.quiet, s.signIn)}>Log ind</button>
             </SignInButton>
           </Show>
         </header>
@@ -300,18 +300,18 @@ const s = stylex.create({
 // Anything else, such as an HTML 404 page when no Backend is running, gets a
 // generic message.
 const errorMessages: Record<string, string> = {
-  ListNotFound: "No such list",
-  ItemNotFound: "No such item",
-  ListChanged: "The list changed. Reload it and try again",
-  OwnerCannotClaim: "Only guests can claim",
-  NotOwner: "Only the list's owner can edit it",
-  FullyClaimed: "Already fully claimed",
-  Unauthorized: "Sign in again",
-  SignInRequired: "Sign in first",
-  PhotoNotFound: "No such photo",
-  PhotoTooLarge: "Photos can be up to 5 MB",
-  NotAnImage: "Upload a JPEG, PNG, GIF, or WebP photo",
-  PhotoStorageFailed: "Photo storage failed, try again",
+  ListNotFound: "Listen findes ikke",
+  ItemNotFound: "Ønsket findes ikke",
+  ListChanged: "Listen er blevet ændret. Genindlæs den, og prøv igen",
+  OwnerCannotClaim: "Kun gæster kan reservere",
+  NotOwner: "Kun listens ejer kan redigere den",
+  FullyClaimed: "Allerede reserveret",
+  Unauthorized: "Log ind igen",
+  SignInRequired: "Log ind først",
+  PhotoNotFound: "Billedet findes ikke",
+  PhotoTooLarge: "Billeder må højst fylde 5 MB",
+  NotAnImage: "Upload et JPEG-, PNG-, GIF- eller WebP-billede",
+  PhotoStorageFailed: "Billedet kunne ikke gemmes. Prøv igen",
 };
 
 export async function readError(response: Response) {
@@ -319,6 +319,6 @@ export async function readError(response: Response) {
   const tag = Predicate.hasProperty(body, "_tag") ? body._tag : undefined;
   if (typeof tag === "string" && tag in errorMessages) return errorMessages[tag]!;
   if (response.status === 400)
-    return "Check the list: 1 to 50 wishes, each with a name, up to 5 links starting with https://, a photo link or upload, and a note of up to 500 characters";
-  return `Ribbon's server didn't answer (${response.status}). Try again in a moment.`;
+    return "Tjek listen: 1 til 50 ønsker, hver med et navn, højst 5 links, der starter med https://, et billedlink eller en upload og en note på højst 500 tegn";
+  return `Ribbons server svarede ikke (${response.status}). Prøv igen om lidt.`;
 }
