@@ -312,6 +312,8 @@ const errorMessages: Record<string, string> = {
   PhotoTooLarge: "Billeder må højst fylde 5 MB",
   NotAnImage: "Upload et JPEG-, PNG-, GIF- eller WebP-billede",
   PhotoStorageFailed: "Billedet kunne ikke gemmes. Prøv igen",
+  TooManyRequests: "For mange forsøg på kort tid. Vent et minut, og prøv igen",
+  DailyLimitReached: "Du har nået dagens grænse. Prøv igen i morgen",
 };
 
 export async function readError(response: Response) {

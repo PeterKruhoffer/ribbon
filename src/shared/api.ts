@@ -8,6 +8,7 @@ import {
 } from "effect/http-api";
 import {
   CreatedList,
+  DailyLimitReached,
   FullyClaimed,
   ItemNotFound,
   ListChanged,
@@ -22,6 +23,7 @@ import {
   PhotoStorageFailed,
   PhotoTooLarge,
   SignInRequired,
+  TooManyRequests,
   Unauthorized,
   UploadedPhoto,
 } from "./wishlist.ts";
@@ -50,6 +52,14 @@ export class SignedIn extends HttpApiMiddleware.Service<
   SignedIn,
   { provides: SignedInUser; requires: Viewer }
 >()("ribbon/SignedIn", { error: SignInRequired }) {}
+
+// Rate limits every route by user, or by IP address when signed out, and caps
+// how many lists and photos a user makes in a day. Runs after Authentication
+// and before the body is read. See src/backend/limits.ts.
+export class Throttle extends HttpApiMiddleware.Service<Throttle, { requires: Viewer }>()(
+  "ribbon/Throttle",
+  { error: [TooManyRequests, DailyLimitReached] },
+) {}
 
 const Id = Schema.String.check(Schema.isPattern(/^[\w-]{1,64}$/));
 const listParams = { listId: Id };
@@ -96,4 +106,9 @@ const Photos = HttpApiGroup.make("photos").add(
   }),
 );
 
-export const RibbonApi = HttpApi.make("Ribbon").add(Lists).add(Photos).middleware(Authentication);
+// The middleware added last runs first: Authentication, then Throttle.
+export const RibbonApi = HttpApi.make("Ribbon")
+  .add(Lists)
+  .add(Photos)
+  .middleware(Throttle)
+  .middleware(Authentication);

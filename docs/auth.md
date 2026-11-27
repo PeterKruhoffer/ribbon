@@ -32,7 +32,7 @@ The Backend passes a socket's viewer to the Durable Object in the `x-ribbon-view
 
 Both are public. `.env.example` has the values for the development instance, and the Amp project sets them for orbs. A production Clerk instance has its own keys; set them in the deploy environment.
 
-The Clerk application is "Ribbon" (`app_3MFMAKmWIMvpTrm1bTHiBOoIyj2`), with a development instance at `moral-escargot-2597.clerk.accounts.dev`. Sign-in uses email codes, passwords, or Google.
+The Clerk application is "Ribbon" (`app_3MFMAKmWIMvpTrm1bTHiBOoIyj2`), with a development instance at `moral-escargot-2597.clerk.accounts.dev`. Sign-in uses email codes, passwords, or Google. Sign-up is open to anyone, by Peter's choice, so his friends can make their own lists. The rate limits and daily caps in [Architecture](architecture.md#rate-limits) keep it from being abused; the development instance also stops at 100 users.
 
 ## Lists made before sign-in
 

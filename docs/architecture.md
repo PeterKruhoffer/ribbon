@@ -1,6 +1,6 @@
 # Architecture
 
-Two Workers, one Durable Object class, and one R2 bucket, all deployed by `alchemy.run.ts`.
+Two Workers, two Durable Object classes, and one R2 bucket, all deployed by `alchemy.run.ts`.
 
 ```text
 Browser
@@ -24,9 +24,11 @@ Wishlist Durable Object ... src/backend/wishlist.ts
 
 **Website Worker.** Serves the React pages. Forwards every `/api/*` request, including WebSocket upgrades, to the Backend. Keep it thin.
 
-**Backend Worker.** An Effect Worker (`Cloudflare.Worker`) serving `RibbonApi`, an Effect `HttpApi` defined in `src/shared/api.ts`. The API declares each route's params, body, answer, and errors; each error class in `src/shared/wishlist.ts` carries its own HTTP status (`httpApiStatus`). Two middlewares check the caller: `Authentication` verifies the Clerk token on every route and provides `Viewer`, and `SignedIn` refuses signed-out requests to create, edit, or upload before their body is read. Each handler calls one Durable Object or photo method. A Durable Object's errors arrive over RPC as plain objects, so the Backend decodes them back into their classes. To add a route, add an endpoint to `RibbonApi` and a handler in `src/backend/backend.ts`.
+**Backend Worker.** An Effect Worker (`Cloudflare.Worker`) serving `RibbonApi`, an Effect `HttpApi` defined in `src/shared/api.ts`. The API declares each route's params, body, answer, and errors; each error class in `src/shared/wishlist.ts` carries its own HTTP status (`httpApiStatus`). Three middlewares check the caller, in this order: `Authentication` verifies the Clerk token on every route and provides `Viewer`, `Throttle` applies the rate limits and daily caps below (`src/backend/limits.ts`), and `SignedIn` refuses signed-out requests to create, edit, or upload. All three run before the body is read. Each handler calls one Durable Object or photo method. A Durable Object's errors arrive over RPC as plain objects, so the Backend decodes them back into their classes. To add a route, add an endpoint to `RibbonApi` and a handler in `src/backend/backend.ts`.
 
 **Photos bucket.** An R2 bucket (`Cloudflare.R2.Bucket`) for photos owners upload, declared in `src/backend/photos.ts` and bound to the Backend; Alchemy creates it with the Backend. Each photo is keyed by a random UUID and carries its uploader's Clerk user id as metadata. A wish stores an uploaded photo as `/api/photos/<key>`, so it stays up when a shop removes its image.
+
+**Quota Durable Object.** `src/backend/quota.ts`, one per signed-in user, addressed by Clerk user id. Its one method, `take(kind, cap)`, counts one more of a kind (an endpoint name) for today (UTC) in its key-value storage, or answers false when the user already reached the cap. See Rate limits below.
 
 **Wishlist Durable Object.** An Effect Durable Object (`Cloudflare.DurableObject`). One instance per list, addressed by list id. It stores the list in its own SQLite storage and holds the list's WebSockets. Its queries live in `src/backend/store.ts`, written as `@effect/sql-sqlite-do` tagged templates; the object keeps the sockets, builds one SQL client per instance, and treats a storage failure as a defect. An edit's writes run in one storage transaction. Methods:
 
@@ -51,11 +53,24 @@ Wishlist Durable Object ... src/backend/wishlist.ts
 | `POST /api/lists/:listId/items/:itemId/claim` | Body `{ "guest": "<token>" }`. 200, 404, 409, or 403 for the owner.                                                                                           |
 | `GET /api/lists/:listId/live`                 | WebSocket upgrade. See [Live updates](live-updates.md).                                                                                                       |
 
-Requests send the Clerk session token as `Authorization: Bearer <token>`, and WebSockets as `?token=`. A token that fails verification gets 401 on any route. See [Auth](auth.md).
+Requests send the Clerk session token as `Authorization: Bearer <token>`, and WebSockets as `?token=`. A token that fails verification gets 401 on any route, and any route can answer 429 (see Rate limits). See [Auth](auth.md).
 
 JSON bodies need `content-type: application/json`; a missing type counts as JSON, and any other gets 415. An error answers with its status and a JSON body naming the error, such as `{ "_tag": "ListNotFound", "listId": "…" }`. A body that fails its schema gets an empty 400. The browser turns these into words in `readError` (`src/ui/kit.tsx`).
 
 Limits: titles 1 to 100 characters after trimming, 1 to 50 items, item titles up to 200 characters, quantities 1 to 99. Each item may have a photo, up to 5 shop links, and a note of up to 500 characters. Shop links must be `http(s)` URLs of up to 2000 characters; a photo is either such a URL or an uploaded photo's `/api/photos/<key>` path. They are rendered as `href` and `src`, so other schemes are refused.
+
+### Rate limits
+
+Every route counts each request against its Clerk user id, or its IP address (`cf-connecting-ip`) when signed out. Over a limit, the Backend answers 429 with `{ "_tag": "TooManyRequests" }` or `{ "_tag": "DailyLimitReached", "limit": <cap> }`.
+
+| Limit                         | Counts                                                 | How                                                                   |
+| ----------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------- |
+| 600 reads a minute            | Every `GET`: lists, photos, and sockets                | Cloudflare rate limit binding `READ_LIMIT`, approximate per location  |
+| 60 writes a minute            | Everything else, including guests' claims              | Cloudflare rate limit binding `WRITE_LIMIT`, approximate per location |
+| 20 new lists a day (UTC)      | `POST /api/lists`, per user                            | The user's Quota Durable Object, exact                                |
+| 200 photo uploads a day (UTC) | `POST /api/photos`, per user, refused uploads included | The user's Quota Durable Object, exact                                |
+
+The bindings are declared in `src/backend/limits.ts`, like the Photos bucket in `photos.ts`; Alchemy attaches them to the Backend. Their namespace ids are fixed, so every stage shares the same counters. A limiter that errors lets the request through. A new endpoint gets the read or write limit by its method; add it to `dailyCaps` in `limits.ts` if it keeps data.
 
 Uploads take JPEG, PNG, GIF, or WebP up to 5 MB. The Backend reads the type from the file's first bytes and serves it with `nosniff`, so nothing but a raster image is served from Ribbon's origin. Before uploading, the browser redraws the photo as a JPEG of at most 1600 px, which drops location data and keeps phone photos far under the limit. A photo no saved wish uses, because its list was never created or an edit replaced or removed it, stays in the bucket; nothing cleans those up yet.
 

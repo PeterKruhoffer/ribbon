@@ -20,6 +20,7 @@ import {
   SignInRequired,
 } from "../shared/wishlist.ts";
 import { viewerHeader, viewerOf } from "./auth.ts";
+import { makeThrottle } from "./limits.ts";
 import { makePhotos } from "./photos.ts";
 import Wishlist from "./wishlist.ts";
 
@@ -64,6 +65,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
   Effect.gen(function* () {
     const lists = yield* Wishlist;
     const photos = yield* makePhotos;
+    const throttle = yield* makeThrottle;
     // The Clerk instance's PEM public key. It is public, but Alchemy binds every
     // Config value as a secret.
     const jwtKey = yield* Config.String("CLERK_JWT_KEY");
@@ -165,10 +167,12 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
     return {
       fetch: HttpApiBuilder.layer(RibbonApi).pipe(
         Layer.provide([listHandlers, photoHandlers]),
-        Layer.provide([authentication, signedIn]),
+        Layer.provide([authentication, throttle, signedIn]),
         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+  }).pipe(
+    Effect.provide([Cloudflare.R2.ReadWriteBucketBinding, Cloudflare.Workers.RateLimitBinding]),
+  ),
 ) {}

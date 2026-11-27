@@ -157,3 +157,18 @@ export class PhotoStorageFailed extends Schema.TaggedError<PhotoStorageFailed>()
   {},
   { httpApiStatus: 502 },
 ) {}
+
+// Too many requests in the last minute, from this user or, signed out, this
+// IP address. See Rate limits in docs/architecture.md.
+export class TooManyRequests extends Schema.TaggedError<TooManyRequests>()(
+  "TooManyRequests",
+  {},
+  { httpApiStatus: 429 },
+) {}
+
+// The user made as many lists or uploaded as many photos as one day allows.
+export class DailyLimitReached extends Schema.TaggedError<DailyLimitReached>()(
+  "DailyLimitReached",
+  { limit: Schema.Number },
+  { httpApiStatus: 429 },
+) {}
