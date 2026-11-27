@@ -2,7 +2,10 @@
 // Usage: RIBBON_OWNER_TOKEN=<token> pnpm verify:live <base-url>
 // The token is a Clerk session token for any user. Sign in on the site and run
 // `await Clerk.session.getToken()` in the browser console. It lasts 60 s, so
-// start the script right away; it uses the token in the first seconds.
+// start the script right away; its last use, deleting the list it made, comes
+// about 40 s in. Each run takes 2 of the user's 20 daily list creations (the
+// invalid list counts) and 3 of 200 uploads, and about 15 writes as the owner
+// and 24 from its IP, under the 60 a minute write limit.
 const base = process.argv[2];
 const token = process.env.RIBBON_OWNER_TOKEN;
 if (!token) throw new Error("Set RIBBON_OWNER_TOKEN to a Clerk session token");
@@ -39,8 +42,9 @@ const connect = (url) =>
     socket.addEventListener("error", reject);
   });
 
-const claim = (item, guest = "guest-a", headers = {}) =>
-  send(`${api}/items/${item}/claim`, { method: "POST", headers, body: JSON.stringify({ guest }) });
+const claim = (item, guest = "guest-a", headers = {}, method = "POST") =>
+  send(`${api}/items/${item}/claim`, { method, headers, body: JSON.stringify({ guest }) });
+const unclaim = (item, guest = "guest-a", headers = {}) => claim(item, guest, headers, "DELETE");
 
 // 0. Create a list. Only signed-in users create lists, invalid bodies are
 // refused, and unknown lists are 404.
@@ -113,6 +117,7 @@ check(
   JSON.stringify(initial),
 );
 const [lego, wingspan, socks] = initial.items.map((i) => i.id);
+
 const guestB = await connect(ws());
 const owner = await connect(ws(`?token=${encodeURIComponent(token)}`));
 for (const c of [guestB, owner]) {
@@ -163,8 +168,38 @@ check(
 const oldLink = await (await send(`${api}?as=owner`)).json();
 check("?as=owner without a token is a guest", oldLink.role === "guest");
 
-// 3. The owner cannot claim.
+// 3. The owner cannot claim, or undo a claim.
 check("owner claim is refused", (await claim(socks, "owner", asOwner)).status === 403);
+const racer = `racer-${statuses.indexOf(200)}`;
+check("owner undo is refused", (await unclaim(lego, racer, asOwner)).status === 403);
+const ownerWithGuest = await (
+  await send(api, { headers: { ...asOwner, "x-ribbon-guest": racer } })
+).json();
+check(
+  "owner view has no claims, even with a guest token",
+  ownerWithGuest.items.every((i) => !("remaining" in i) && !("mine" in i)),
+);
+
+// 3b. A guest undoes their own claim, and only their own. Other guests get the
+// event; the owner does not.
+const mine = await (await send(api, { headers: { "x-ribbon-guest": racer } })).json();
+check(
+  "guest view counts the guest's own claims",
+  mine.items.find((i) => i.id === lego).mine === 1 &&
+    mine.items.find((i) => i.id === socks).mine === 0,
+  JSON.stringify(mine.items.map((i) => i.mine)),
+);
+const legoEvents = () => guestB.events.filter((e) => e.subscriptionId === "s-lego").length;
+check("another guest cannot undo it", (await unclaim(lego, "guest-a")).status === 404);
+const undone = await unclaim(lego, racer);
+await sleep(1500);
+check("guest undoes their claim", undone.status === 200, `status ${undone.status}`);
+const afterUndo = await (await send(api)).json();
+check("lego is free again", afterUndo.items.find((i) => i.id === lego).remaining === 1);
+check("guest B gets the undo event", legoEvents() === 2, `${legoEvents()} lego events`);
+check("undoing twice is 404", (await unclaim(lego, racer)).status === 404);
+check("undo on a missing item is 404", (await unclaim("missing", racer)).status === 404);
+check("lego can be claimed again", (await claim(lego, racer)).status === 200);
 
 // 4. Claiming a missing item is a 404, also on a list that doesn't exist.
 const fresh = `${base}/api/lists/${crypto.randomUUID()}/items/missing/claim`;
@@ -221,6 +256,26 @@ check(
   owner.events.length === 0,
   `${owner.events.length} events`,
 );
+check("a photo moved to another wish stays", (await send(`${base}${photo}`)).status === 200);
+
+// 6b. A photo an edit replaces is deleted.
+const { photo: replaced } = await (await upload(png)).json();
+const withPhoto = (wingspanPhoto) => ({
+  ...kept,
+  items: kept.items.map((i) => (i.id === wingspan ? { ...i, photo: wingspanPhoto } : i)),
+});
+const addedStatus = (await edit(withPhoto(replaced))).status;
+check(
+  "edit takes a second uploaded photo",
+  addedStatus === 204 && (await send(`${base}${replaced}`)).status === 200,
+  `status ${addedStatus}`,
+);
+const replacedStatus = (await edit(withPhoto("https://example.com/wingspan.jpg"))).status;
+check(
+  "a replaced photo is deleted",
+  replacedStatus === 204 && (await send(`${base}${replaced}`)).status === 404,
+  `status ${replacedStatus}`,
+);
 
 // 7. Subscriptions survive the object going idle (hibernation after ~10 s).
 const idle = await connect(ws());
@@ -229,6 +284,22 @@ await sleep(20000);
 await claim(wingspan);
 await sleep(1500);
 check("event delivered after 20 s idle", idle.events.length === 1, `${idle.events.length} events`);
+
+// 8. The owner deletes the list, which also deletes its photos. Guests get one
+// list event so their pages find the list gone. Deleting it keeps each CI
+// run from leaving a list behind.
+const remove = (headers = asOwner) => send(api, { method: "DELETE", headers });
+check("signed-out delete is 401", (await remove({})).status === 401);
+const listEvents = () => guestB.events.filter((e) => e.subscriptionId === "s-list").length;
+const listEventsBefore = listEvents();
+const deleted = await remove();
+await sleep(1500);
+check("owner delete is 204", deleted.status === 204, `status ${deleted.status}`);
+check("deleted list is 404", (await send(api)).status === 404);
+check("deleted list's photo is 404", (await send(`${base}${photo}`)).status === 404);
+check("guest B gets the delete event", listEvents() === listEventsBefore + 1);
+check("owner gets nothing at all", owner.events.length === 0, `${owner.events.length} events`);
+check("deleting again is 404", (await remove()).status === 404);
 
 for (const c of [guestB, owner, idle]) c.close();
 console.log(failures ? `${failures} failed` : "all passed");

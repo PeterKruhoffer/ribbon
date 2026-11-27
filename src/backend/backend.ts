@@ -15,8 +15,10 @@ import {
   ItemNotFound,
   ListChanged,
   ListNotFound,
+  NotClaimed,
   NotOwner,
   OwnerCannotClaim,
+  photoKey,
   SignInRequired,
 } from "../shared/wishlist.ts";
 import { viewerHeader, viewerOf } from "./auth.ts";
@@ -49,11 +51,15 @@ const ListError = Schema.Union([
   OwnerCannotClaim,
   NotOwner,
   FullyClaimed,
+  NotClaimed,
 ]);
 const isListError = Schema.is(ListError);
 const decodeListError = Schema.decodeUnknownSync(ListError);
 const fromObject = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.mapError(effect, (error) => (isListError(error) ? error : decodeListError(error)) as E);
+
+const uploadedPhotos = (items: ReadonlyArray<{ photo?: string }>) =>
+  items.flatMap((item) => photoKey(item.photo) ?? []);
 
 export default class Backend extends Cloudflare.Worker<Backend>()(
   "Backend",
@@ -99,15 +105,18 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
             Effect.fnUntraced(function* ({ payload }) {
               const owner = yield* SignedInUser;
               const listId = crypto.randomUUID();
+              yield* photos.keep(uploadedPhotos(payload.items), owner);
               yield* fromObject(lists.getByName(listId).create(payload, owner));
               return { listId };
             }),
           )
           .handle(
             "read",
-            Effect.fnUntraced(function* ({ params }) {
+            Effect.fnUntraced(function* ({ params, headers }) {
               return yield* fromObject(
-                lists.getByName(params.listId).read(params.listId, yield* Viewer),
+                lists
+                  .getByName(params.listId)
+                  .read(params.listId, yield* Viewer, headers["x-ribbon-guest"]),
               );
             }),
           )
@@ -115,9 +124,21 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
             "update",
             Effect.fnUntraced(function* ({ params, payload }) {
               const owner = yield* SignedInUser;
-              yield* fromObject(
+              yield* photos.keep(uploadedPhotos(payload.items), owner);
+              const unused = yield* fromObject(
                 lists.getByName(params.listId).update(params.listId, payload, owner),
               );
+              yield* photos.remove(unused, owner);
+            }),
+          )
+          .handle(
+            "delete",
+            Effect.fnUntraced(function* ({ params }) {
+              const owner = yield* SignedInUser;
+              const unused = yield* fromObject(
+                lists.getByName(params.listId).delete(params.listId, owner),
+              );
+              yield* photos.remove(unused, owner);
             }),
           )
           .handle(
@@ -126,6 +147,15 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
               const viewer = yield* Viewer;
               return yield* fromObject(
                 lists.getByName(params.listId).claim(params.itemId, payload.guest, viewer),
+              );
+            }),
+          )
+          .handle(
+            "unclaim",
+            Effect.fnUntraced(function* ({ params, payload }) {
+              const viewer = yield* Viewer;
+              return yield* fromObject(
+                lists.getByName(params.listId).unclaim(params.itemId, payload.guest, viewer),
               );
             }),
           )

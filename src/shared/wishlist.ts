@@ -14,8 +14,11 @@ export const Item = Schema.Struct({
   photo: Schema.optional(Schema.String),
   links: Schema.Array(Schema.String),
   note: Schema.optional(Schema.String),
-  // Only guests see this. "2 of 5 left" would spoil the owner.
+  // Only guests see these. "2 of 5 left" would spoil the owner. mine counts
+  // the claims made with the guest token the request sent, so that guest can
+  // undo them.
   remaining: Schema.optional(Schema.Number),
+  mine: Schema.optional(Schema.Number),
 });
 
 // role is "owner" only for the signed-in user who created the list.
@@ -37,6 +40,9 @@ const Url = Schema.Trim.check(
 
 // Uploaded photos live at photoPath + a UUID on Ribbon's own origin.
 export const photoPath = "/api/photos/";
+// The bucket key of an uploaded photo, or undefined for a photo link.
+export const photoKey = (photo: string | undefined) =>
+  photo?.startsWith(photoPath) ? photo.slice(photoPath.length) : undefined;
 const Photo = Schema.Trim.check(
   Schema.isMaxLength(2000),
   Schema.isPattern(/^(?:https?:\/\/[^\s/?#]+\S*|\/api\/photos\/[0-9a-f-]{36})$/i),
@@ -67,6 +73,10 @@ export const ListEdit = Schema.Struct({
   ).check(Schema.isMinLength(1), Schema.isMaxLength(50)),
 });
 export type ListEdit = typeof ListEdit.Type;
+
+// The random token a guest's browser keeps in localStorage. A claim stores it,
+// and only the same token undoes that claim.
+export const GuestToken = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
 
 // Answer to POST /api/lists.
 export const CreatedList = Schema.Struct({ listId: Schema.String });
@@ -106,7 +116,7 @@ export class OwnerCannotClaim extends Schema.TaggedError<OwnerCannotClaim>()(
   { httpApiStatus: 403 },
 ) {}
 
-// Only the list's owner edits it.
+// Only the list's owner edits or deletes it.
 export class NotOwner extends Schema.TaggedError<NotOwner>()(
   "NotOwner",
   {},
@@ -131,6 +141,13 @@ export class FullyClaimed extends Schema.TaggedError<FullyClaimed>()(
   "FullyClaimed",
   { itemId: Schema.String },
   { httpApiStatus: 409 },
+) {}
+
+// The guest has no claim on this item to undo.
+export class NotClaimed extends Schema.TaggedError<NotClaimed>()(
+  "NotClaimed",
+  { itemId: Schema.String },
+  { httpApiStatus: 404 },
 ) {}
 
 export class PhotoNotFound extends Schema.TaggedError<PhotoNotFound>()(

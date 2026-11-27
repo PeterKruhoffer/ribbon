@@ -8,8 +8,10 @@ import {
   ListNotFound,
   type ListView,
   type NewList,
+  NotClaimed,
   NotOwner,
   OwnerCannotClaim,
+  photoKey,
   type Role,
 } from "../shared/wishlist.ts";
 
@@ -45,6 +47,18 @@ const titleOf = Effect.fnUntraced(function* (listId: string) {
   return meta.value;
 });
 
+// The bucket keys of the photos this list's wishes use.
+const photoKeys = Effect.fnUntraced(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const rows = yield* sql<{ photo: string }>`SELECT photo FROM item_detail WHERE photo IS NOT NULL`;
+  return new Set(rows.flatMap(({ photo }) => photoKey(photo) ?? []));
+});
+
+const ownerOnly = Effect.fnUntraced(function* (listId: string, viewer: string | undefined) {
+  yield* titleOf(listId);
+  if ((yield* roleOf(viewer)) !== "owner") return yield* new NotOwner();
+});
+
 // Writes one wish, new or existing, with its details. Its claims stay.
 const saveItem = Effect.fnUntraced(function* (
   id: string,
@@ -77,15 +91,15 @@ export const createList = Effect.fnUntraced(function* (list: NewList, owner: str
 // The owner replaces the list with an edited one, in one transaction. A removed
 // wish takes its claims with it. Lowering a quantity below its claims keeps the
 // claims, and guests see 0 left. Nothing here depends on claims, so the owner
-// learns nothing about them from an edit.
+// learns nothing about them from an edit. Answers the uploaded photos no wish
+// uses any more, for the Backend to delete.
 export const updateList = Effect.fnUntraced(function* (
   listId: string,
   list: ListEdit,
   viewer: string | undefined,
 ) {
   const sql = yield* SqlClient.SqlClient;
-  yield* titleOf(listId);
-  if ((yield* roleOf(viewer)) !== "owner") return yield* new NotOwner();
+  yield* ownerOnly(listId, viewer);
   const existing = new Set((yield* sql<{ id: string }>`SELECT id FROM item`).map((row) => row.id));
   // Check every id before writing, so a stale edit changes nothing.
   const kept = new Set<string>();
@@ -94,6 +108,7 @@ export const updateList = Effect.fnUntraced(function* (
     if (!existing.has(id) || kept.has(id)) return yield* new ListChanged({ itemId: id });
     kept.add(id);
   }
+  const photosBefore = yield* photoKeys();
   yield* sql.withTransaction(
     Effect.gen(function* () {
       for (const id of existing) {
@@ -107,9 +122,35 @@ export const updateList = Effect.fnUntraced(function* (
         yield* saveItem(id ?? crypto.randomUUID(), position, item);
     }),
   );
+  const photosAfter = new Set(list.items.map((item) => photoKey(item.photo)));
+  return [...photosBefore].filter((key) => !photosAfter.has(key));
 });
 
-export const readList = Effect.fnUntraced(function* (listId: string, viewer: string | undefined) {
+// The owner deletes the list: every row goes, so the object reads as a list
+// that was never made. Answers the list's uploaded photos, for the Backend to
+// delete.
+export const deleteList = Effect.fnUntraced(function* (listId: string, viewer: string | undefined) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* ownerOnly(listId, viewer);
+  const photos = yield* photoKeys();
+  yield* sql.withTransaction(
+    Effect.gen(function* () {
+      yield* sql`DELETE FROM claim`;
+      yield* sql`DELETE FROM item_detail`;
+      yield* sql`DELETE FROM item`;
+      yield* sql`DELETE FROM meta`;
+    }),
+  );
+  return [...photos];
+});
+
+// guest is the token the guest's browser sent, if any. Its own claims come
+// back as mine, so it can undo them.
+export const readList = Effect.fnUntraced(function* (
+  listId: string,
+  viewer: string | undefined,
+  guest: string | undefined,
+) {
   const sql = yield* SqlClient.SqlClient;
   const title = yield* titleOf(listId);
   const role = yield* roleOf(viewer);
@@ -121,11 +162,12 @@ export const readList = Effect.fnUntraced(function* (listId: string, viewer: str
     links: string | null;
     note: string | null;
     claimed: number;
-  }>`SELECT item.id, item.title, item.quantity, d.photo, d.links, d.note, COUNT(claim.id) AS claimed FROM item LEFT JOIN item_detail d ON d.item_id = item.id LEFT JOIN claim ON claim.item_id = item.id GROUP BY item.id ORDER BY item.position`;
+    mine: number;
+  }>`SELECT item.id, item.title, item.quantity, d.photo, d.links, d.note, COUNT(claim.id) AS claimed, COUNT(CASE WHEN claim.guest = ${guest ?? null} THEN 1 END) AS mine FROM item LEFT JOIN item_detail d ON d.item_id = item.id LEFT JOIN claim ON claim.item_id = item.id GROUP BY item.id ORDER BY item.position`;
   const view: ListView = {
     title,
     role,
-    items: rows.map(({ id, title, quantity, photo, links, note, claimed }) => ({
+    items: rows.map(({ id, title, quantity, photo, links, note, claimed, mine }) => ({
       id,
       title,
       quantity,
@@ -134,6 +176,7 @@ export const readList = Effect.fnUntraced(function* (listId: string, viewer: str
       ...(note === null ? {} : { note }),
       // An edit can lower a quantity below the claims already made.
       ...(role === "owner" ? {} : { remaining: Math.max(0, quantity - claimed) }),
+      ...(role === "owner" || guest === undefined ? {} : { mine }),
     })),
   };
   return view;
@@ -160,4 +203,25 @@ export const claimItem = Effect.fnUntraced(function* (
     remaining: number;
   }>`SELECT quantity - (SELECT COUNT(*) FROM claim WHERE item_id = item.id) AS remaining FROM item WHERE id = ${itemId}`;
   return { remaining: row!.remaining };
+});
+
+// Undoes the guest token's latest claim on the item, in one statement. The
+// owner is refused before any claim is read, so the answer tells them nothing.
+export const unclaimItem = Effect.fnUntraced(function* (
+  itemId: string,
+  guest: string,
+  viewer: string | undefined,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  if ((yield* roleOf(viewer)) === "owner") return yield* new OwnerCannotClaim();
+  const deleted =
+    yield* sql`DELETE FROM claim WHERE id = (SELECT MAX(id) FROM claim WHERE item_id = ${itemId} AND guest = ${guest}) RETURNING id`;
+  if (deleted.length === 0) {
+    const exists = yield* sql`SELECT 1 FROM item WHERE id = ${itemId}`;
+    return yield* exists.length > 0 ? new NotClaimed({ itemId }) : new ItemNotFound({ itemId });
+  }
+  const [row] = yield* sql<{
+    remaining: number;
+  }>`SELECT quantity - (SELECT COUNT(*) FROM claim WHERE item_id = item.id) AS remaining FROM item WHERE id = ${itemId}`;
+  return { remaining: Math.max(0, row!.remaining) };
 });

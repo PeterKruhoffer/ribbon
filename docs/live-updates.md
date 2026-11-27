@@ -1,6 +1,6 @@
 # Live updates
 
-Each browser opens one WebSocket per list to `/api/lists/:listId/live`. The Wishlist Durable Object holds these sockets and sends events when a claim changes an item or the owner edits the list.
+Each browser opens one WebSocket per list to `/api/lists/:listId/live`. The Wishlist Durable Object holds these sockets and sends events when a claim or an undone claim changes an item, or the owner edits or deletes the list.
 
 ## Claim flow
 
@@ -18,7 +18,7 @@ Guest B refetches the list after the event. The event itself holds only the item
 
 ## Protocol
 
-Topics use fate's format: `entity:Item:<itemId>` for claims, and `entity:List:<listId>` for the owner's edits (`changed: ["title", "items"]`), since an edit can add and remove items. The page subscribes to both and refetches on either.
+Topics use fate's format: `entity:Item:<itemId>` for claims and undone claims, and `entity:List:<listId>` for the owner's edits and deletes (`changed: ["title", "items"]`), since an edit can add and remove items. The page subscribes to both and refetches on either.
 
 Browser to server:
 
@@ -44,9 +44,10 @@ Server to browser:
 
 - The owner view has no `remaining` counts.
 - The socket's role comes from the Clerk token in `?token=`, which the Backend verifies and passes on to the object. Each socket stores its role in its attachment. Claim events go to guest sockets only. A "something changed" event would already spoil the gift.
-- Edit events also go to guests only. The owner's own page reloads after saving.
+- Edit and delete events also go to guests only. The owner's own page reloads after saving, and shows "Listen er slettet" after deleting.
 - An edit never reads claims, so its result tells the owner nothing about them.
-- The owner cannot claim.
+- The owner cannot claim or undo a claim. An undo checks the role before it reads any claim.
+- `mine`, a guest's own claim count, only comes back to the guest token that made the claims, and never in the owner view.
 
 ## Safe claims
 

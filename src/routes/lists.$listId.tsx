@@ -11,9 +11,10 @@ import { ClaimGift, OpenBox, WrappedGift } from "../ui/figures.tsx";
 import { Page, readError, Ribbon, row, Tag, ui } from "../ui/kit.tsx";
 import { color, figure } from "../ui/tokens.stylex.ts";
 
-// One list. Guests claim items, and a claim in one guest tab updates the
-// others live. The owner sees the share link, can edit the list, and receives
-// no claim events. An edit reaches guests live too.
+// One list. Guests claim items and can undo their own claims, and a claim in
+// one guest tab updates the others live. The owner sees the share link, can
+// edit or delete the list, and receives no claim events. An edit reaches
+// guests live too.
 // The Backend decides the role: the signed-in user who created the list is
 // the owner, and everyone else with the link is a guest.
 
@@ -35,14 +36,16 @@ function ListPage() {
   // Wait for Clerk before the first fetch. Fetching signed out would show the
   // owner the guest view, claims included.
   const { isLoaded, userId, getToken } = useAuth();
-  const [list, setList] = useState<ListView | "missing">();
+  const [list, setList] = useState<ListView | "missing" | "deleted">();
   const [events, setEvents] = useState(0);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [claiming, setClaiming] = useState<string>();
   const [editing, setEditing] = useState(false);
-  // Each claim gets a new id, so its figure remounts and its animation plays again.
-  const [claimed, setClaimed] = useState<{ id: number; title: string }>();
+  const [deleting, setDeleting] = useState(false);
+  // Each claim gets a new id, so its figure remounts and its animation plays
+  // again. An undo replaces the message and hides the figure.
+  const [claimed, setClaimed] = useState<{ id: number; title: string; undone: boolean }>();
   // Items already taken when the list first showed. Their tags hang still; the
   // tag swings in only for an item that becomes taken while the page is open.
   const takenAtLoad = useRef<{ listId: string; ids: Set<string> }>(undefined);
@@ -55,7 +58,10 @@ function ListPage() {
   // userId is a dependency so signing in or out reloads the list in its new role.
   const load = useCallback(async () => {
     if (!isLoaded) return;
-    const response = await fetch(`/api/lists/${listId}`, { headers: await authHeaders() });
+    // The guest token makes the answer count this browser's own claims.
+    const response = await fetch(`/api/lists/${listId}`, {
+      headers: { ...(await authHeaders()), "x-ribbon-guest": guestToken() },
+    });
     if (response.status === 404) return setList("missing");
     if (!response.ok) return setError(await readError(response));
     const view = decodeListView(await response.json());
@@ -67,8 +73,9 @@ function ListPage() {
     void load();
   }, [load]);
 
-  const itemIds = list === "missing" ? undefined : list?.items.map((item) => item.id).join(",");
-  const role = list === "missing" ? undefined : list?.role;
+  const shown = typeof list === "object" ? list : undefined;
+  const itemIds = shown?.items.map((item) => item.id).join(",");
+  const role = shown?.role;
   useEffect(() => {
     if (!itemIds) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -106,10 +113,43 @@ function ListPage() {
       headers: { ...(await authHeaders()), "content-type": "application/json" },
       body: JSON.stringify({ guest: guestToken() }),
     });
-    if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title }));
+    if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title, undone: false }));
     else setError(await readError(response));
     await load();
     setClaiming(undefined);
+  };
+
+  // Undoes this browser's latest claim on the item.
+  const unclaim = async (itemId: string, title: string) => {
+    setError(undefined);
+    setClaiming(itemId);
+    const response = await fetch(`/api/lists/${listId}/items/${itemId}/claim`, {
+      method: "DELETE",
+      headers: { ...(await authHeaders()), "content-type": "application/json" },
+      body: JSON.stringify({ guest: guestToken() }),
+    });
+    if (response.ok) setClaimed((last) => ({ id: (last?.id ?? 0) + 1, title, undone: true }));
+    else setError(await readError(response));
+    await load();
+    setClaiming(undefined);
+  };
+
+  const deleteList = async (title: string) => {
+    if (
+      !confirm(
+        `Slet "${title}"? Listen, alle reservationer og dine uploadede billeder forsvinder for altid, og linket holder op med at virke.`,
+      )
+    )
+      return;
+    setError(undefined);
+    setDeleting(true);
+    const response = await fetch(`/api/lists/${listId}`, {
+      method: "DELETE",
+      headers: await authHeaders(),
+    });
+    setDeleting(false);
+    if (response.ok) setList("deleted");
+    else setError(await readError(response));
   };
 
   const save = async (edit: ListEdit) => {
@@ -139,6 +179,20 @@ function ListPage() {
           Tjek linket, eller{" "}
           <a href="/" {...stylex.props(ui.link)}>
             lav en ny liste
+          </a>
+          .
+        </p>
+      </Page>
+    );
+  if (list === "deleted")
+    return (
+      <Page>
+        <OpenBox style={s.missing} />
+        <h1 {...stylex.props(ui.title)}>Listen er slettet</h1>
+        <p {...stylex.props(ui.sub)}>
+          Linket virker ikke længere.{" "}
+          <a href="/new" {...stylex.props(ui.link)}>
+            Lav en ny liste
           </a>
           .
         </p>
@@ -232,17 +286,30 @@ function ListPage() {
                       <span data-remaining {...stylex.props(s.meta)}>
                         {item.remaining} af {item.quantity} tilbage
                       </span>
-                      {taken ? (
-                        <span {...stylex.props(s.taken)}>Reserveret</span>
-                      ) : (
-                        <button
-                          disabled={claiming !== undefined}
-                          onClick={() => void claim(item.id, item.title)}
-                          {...stylex.props(ui.button)}
-                        >
-                          Reservér
-                        </button>
-                      )}
+                      <div {...stylex.props(s.actions)}>
+                        {(item.mine ?? 0) > 0 && (
+                          <button
+                            disabled={claiming !== undefined}
+                            onClick={() => void unclaim(item.id, item.title)}
+                            aria-label={`Fortryd din reservation af ${item.title}`}
+                            data-unclaim
+                            {...stylex.props(ui.button, ui.quiet)}
+                          >
+                            Fortryd
+                          </button>
+                        )}
+                        {taken ? (
+                          <span {...stylex.props(s.taken)}>Reserveret</span>
+                        ) : (
+                          <button
+                            disabled={claiming !== undefined}
+                            onClick={() => void claim(item.id, item.title)}
+                            {...stylex.props(ui.button)}
+                          >
+                            Reservér
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -251,6 +318,25 @@ function ListPage() {
           })}
         </ul>
       </Ribbon>
+      {owner && (
+        <div {...stylex.props(s.footer)}>
+          {error && (
+            <p role="alert" {...stylex.props(ui.error)}>
+              {error}
+            </p>
+          )}
+          <div>
+            <button
+              disabled={deleting}
+              onClick={() => void deleteList(list.title)}
+              data-delete
+              {...stylex.props(ui.button, ui.quiet)}
+            >
+              {deleting ? "Sletter…" : "Slet liste"}
+            </button>
+          </div>
+        </div>
+      )}
       {!owner && (
         <div {...stylex.props(s.footer)}>
           {error && (
@@ -259,11 +345,13 @@ function ListPage() {
             </p>
           )}
           <div {...stylex.props(s.status)}>
-            {claimed && <ClaimGift key={claimed.id} style={s.claimFigure} />}
+            {claimed && !claimed.undone && <ClaimGift key={claimed.id} style={s.claimFigure} />}
             <p aria-live="polite" data-events={events} {...stylex.props(ui.small)}>
-              {claimed
-                ? `Du har reserveret ${claimed.title}. De andre gæster kan se det nu.`
-                : "Reservationer vises for alle gæster med det samme."}
+              {!claimed
+                ? "Reservationer vises for alle gæster med det samme."
+                : claimed.undone
+                  ? `Du har fortrudt din reservation af ${claimed.title}. Den er ledig igen.`
+                  : `Du har reserveret ${claimed.title}. De andre gæster kan se det nu. Fortryd den ved ønsket, hvis det var en fejl.`}
             </p>
           </div>
         </div>
@@ -426,6 +514,7 @@ const s = stylex.create({
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
   },
+  actions: { display: "flex", alignItems: "center", gap: 8 },
   taken: { minWidth: 76, fontSize: 15, color: color.soft, textAlign: "center" },
   footer: { display: "grid", gap: 6, marginTop: 24 },
   status: { display: "flex", alignItems: "center", gap: 12 },

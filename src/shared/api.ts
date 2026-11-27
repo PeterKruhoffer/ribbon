@@ -10,6 +10,7 @@ import {
   CreatedList,
   DailyLimitReached,
   FullyClaimed,
+  GuestToken,
   ItemNotFound,
   ListChanged,
   ListEdit,
@@ -17,6 +18,7 @@ import {
   ListView,
   NewList,
   NotAnImage,
+  NotClaimed,
   NotOwner,
   OwnerCannotClaim,
   PhotoNotFound,
@@ -70,9 +72,13 @@ const Lists = HttpApiGroup.make("lists").add(
   HttpApiEndpoint.post("create", "/api/lists", {
     payload: NewList,
     success: CreatedList.pipe(HttpApiSchema.status(201)),
+    error: PhotoStorageFailed,
   }).middleware(SignedIn),
+  // A guest's browser sends its token so the answer counts that guest's own
+  // claims. The owner's answer never has claim data, token or not.
   HttpApiEndpoint.get("read", "/api/lists/:listId", {
     params: listParams,
+    headers: { "x-ribbon-guest": Schema.optional(GuestToken) },
     success: ListView,
     error: ListNotFound,
   }),
@@ -80,13 +86,27 @@ const Lists = HttpApiGroup.make("lists").add(
     params: listParams,
     payload: ListEdit,
     success: HttpApiSchema.NoContent,
-    error: [ListNotFound, NotOwner, ListChanged],
+    error: [ListNotFound, NotOwner, ListChanged, PhotoStorageFailed],
+  }).middleware(SignedIn),
+  // Deletes the list, its claims, and its uploaded photos. The owner's page
+  // asks first.
+  HttpApiEndpoint.delete("delete", "/api/lists/:listId", {
+    params: listParams,
+    success: HttpApiSchema.NoContent,
+    error: [ListNotFound, NotOwner],
   }).middleware(SignedIn),
   HttpApiEndpoint.post("claim", "/api/lists/:listId/items/:itemId/claim", {
     params: { listId: Id, itemId: Id },
-    payload: Schema.Struct({ guest: Schema.String.check(Schema.isMaxLength(64)) }),
+    payload: Schema.Struct({ guest: GuestToken }),
     success: Schema.Struct({ remaining: Schema.Number }),
     error: [OwnerCannotClaim, FullyClaimed, ItemNotFound],
+  }),
+  // Undoes one of the claims this guest token made on the item.
+  HttpApiEndpoint.delete("unclaim", "/api/lists/:listId/items/:itemId/claim", {
+    params: { listId: Id, itemId: Id },
+    payload: Schema.Struct({ guest: GuestToken }),
+    success: Schema.Struct({ remaining: Schema.Number }),
+    error: [OwnerCannotClaim, NotClaimed, ItemNotFound],
   }),
   // A WebSocket upgrade, answered by the list's Durable Object. See
   // docs/live-updates.md.

@@ -38,7 +38,7 @@ Keep the compatibility date in `alchemy.run.ts` at or below what the local worke
 Deploying to verify work is allowed.
 
 1. `pnpm run deploy --stage dev --yes` prints `url` and `backendUrl`.
-2. Sign in on `<url>`, run `await Clerk.session.getToken()` in the browser console, and within a minute run `RIBBON_OWNER_TOKEN=<token> pnpm verify:live <url>`. It checks sign-in for list creation, photo upload and read-back, live delivery, the owner getting no events, owner edits, the race for the last item, 404s, unsubscribe, and delivery after 20 s idle.
+2. Sign in on `<url>`, run `await Clerk.session.getToken()` in the browser console, and within a minute run `RIBBON_OWNER_TOKEN=<token> pnpm verify:live <url>`. It checks sign-in for list creation, photo upload and read-back, live delivery, the owner getting no events, guests undoing their own claims, owner edits, photo cleanup, the race for the last item, 404s, unsubscribe, delivery after 20 s idle, and deleting the list. Its last owner request comes about 40 s in, inside the token's 60 s.
 
 Demo: sign in and create a list at `<url>`. It opens the owner view; open its share link in two private windows as guests.
 
@@ -64,7 +64,7 @@ Repository secrets, under Settings, Secrets and variables, Actions:
 
 The token needs Secrets Store Write even though CI only reads: without cached credentials, Alchemy reads its state store token through a preview Worker that binds a Secrets Store secret. Without it, the deploy fails with "Edge-preview secret read failed".
 
-`scripts/owner-token.mjs` uses the secret key to sign in the test user `ci+clerk_test@example.com` and prints a session token for `verify:live`. Clerk only allows this on development instances. Each run leaves one verify list in `prod`.
+`scripts/owner-token.mjs` uses the secret key to sign in the test user `ci+clerk_test@example.com` and prints a session token for `verify:live`. Clerk only allows this on development instances. Each run deletes the list it creates, so a run that finishes leaves nothing in `prod`. Lists from runs before list deletion existed stay.
 
 ## Orbs
 

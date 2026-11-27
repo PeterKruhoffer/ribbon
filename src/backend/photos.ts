@@ -12,10 +12,25 @@ import {
 // Wish photos the owner uploads, kept in R2 so they stay up after a shop takes
 // its own image down. Each photo's key is a random UUID, and its URL is
 // /api/photos/<key>: guests load it with the list, so reading needs no sign-in.
+//
+// An upload lands under pending/, which R2 empties after a week, so a photo
+// for a list that was never saved goes away by itself. Saving a list moves
+// its photos out of pending/ (keep). Deleting a list, or an edit that drops a
+// photo, deletes it (remove).
 
-export const Photos = Cloudflare.R2.Bucket("Photos");
+const pending = "pending/";
+export const Photos = Cloudflare.R2.Bucket("Photos", {
+  lifecycleRules: [
+    {
+      id: "expire-unsaved-photos",
+      prefix: pending,
+      deleteObjectsTransition: { condition: { type: "Age", maxAge: 7 * 24 * 60 * 60 } },
+    },
+  ],
+});
 
-// The browser shrinks photos to 1600 px JPEGs, which stay well under this.
+// The browser redraws photos other than GIFs as 1600 px JPEGs, which stay well
+// under this. GIFs are uploaded unchanged, so this is their limit.
 const maxBytes = 5 * 1024 * 1024;
 
 // The type comes from the file's first bytes, never from the browser's header,
@@ -49,14 +64,20 @@ export const makePhotos = Effect.gen(function* () {
     if (contentType === undefined) return yield* new NotAnImage();
     const key = crypto.randomUUID();
     yield* bucket
-      .put(key, bytes, { httpMetadata: { contentType }, customMetadata: { owner: viewer } })
+      .put(`${pending}${key}`, bytes, {
+        httpMetadata: { contentType },
+        customMetadata: { owner: viewer },
+      })
       .pipe(Effect.catchTag("R2Error", storageFailed));
     return { photo: `${photoPath}${key}` };
   });
 
-  // GET /api/photos/<key>. A key never gets new content, so browsers keep it.
+  // GET /api/photos/<key>, saved or still pending. A key never gets new
+  // content, so browsers keep it.
   const serve = Effect.fn("Photos.serve")(function* (key: string) {
-    const object = yield* bucket.get(key).pipe(Effect.catchTag("R2Error", storageFailed));
+    const object = yield* Effect.gen(function* () {
+      return (yield* bucket.get(key)) ?? (yield* bucket.get(`${pending}${key}`));
+    }).pipe(Effect.catchTag("R2Error", storageFailed));
     if (object === null) return yield* new PhotoNotFound();
     return HttpServerResponse.stream(object.body, {
       contentType: object.httpMetadata?.contentType ?? "application/octet-stream",
@@ -67,5 +88,47 @@ export const makePhotos = Effect.gen(function* () {
     });
   });
 
-  return { upload, serve };
+  // Before a list is saved: moves the viewer's pending photos among keys out
+  // of pending/. Photos already saved, or uploaded by someone else, stay as
+  // they are. The copy is written before the pending one goes, so the photo
+  // never stops loading.
+  const keep = Effect.fn("Photos.keep")(
+    function* (keys: ReadonlyArray<string>, viewer: string) {
+      yield* Effect.forEach(
+        new Set(keys),
+        Effect.fnUntraced(function* (key) {
+          const object = yield* bucket.get(`${pending}${key}`);
+          if (object === null || object.customMetadata?.owner !== viewer) return;
+          yield* bucket.put(key, yield* object.arrayBuffer(), {
+            httpMetadata: object.httpMetadata,
+            customMetadata: object.customMetadata,
+          });
+          yield* bucket.delete(`${pending}${key}`);
+        }),
+        { concurrency: 10, discard: true },
+      );
+    },
+    Effect.catchTag("R2Error", storageFailed),
+  );
+
+  // After a list is deleted or an edit drops photos: deletes the ones the
+  // viewer uploaded. A wish can point at anyone's photo, so the uploader is
+  // checked. The list is already saved, so a failure is only logged; the
+  // photo stays behind.
+  const remove = Effect.fn("Photos.remove")(
+    function* (keys: ReadonlyArray<string>, viewer: string) {
+      const owned = yield* Effect.filter(
+        keys,
+        Effect.fnUntraced(function* (key) {
+          const object = yield* bucket.head(key);
+          return object?.customMetadata?.owner === viewer;
+        }),
+        { concurrency: 10 },
+      );
+      if (owned.length > 0) yield* bucket.delete(owned);
+    },
+    Effect.catchTag("R2Error", (error) => Effect.logError("Photo cleanup failed", error)),
+  );
+
+  return { upload, serve, keep, remove };
 });

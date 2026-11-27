@@ -75,16 +75,35 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           list: ListEdit,
           viewer: string | undefined,
         ) {
-          yield* run(Store.updateList(listId, list, viewer));
+          const unusedPhotos = yield* run(Store.updateList(listId, list, viewer));
           // Wishes can come and go, so the event is on the list's topic.
           yield* publishToGuests(entityTopic("List", listId), {
             id: listId,
             changed: ["title", "items"],
           });
+          return unusedPhotos;
         }),
 
-        read: Effect.fn("Wishlist.read")(function* (listId: string, viewer: string | undefined) {
-          return yield* run(Store.readList(listId, viewer));
+        // Guests' pages refetch on the list event, find no list, and close
+        // their sockets.
+        delete: Effect.fn("Wishlist.delete")(function* (
+          listId: string,
+          viewer: string | undefined,
+        ) {
+          const photos = yield* run(Store.deleteList(listId, viewer));
+          yield* publishToGuests(entityTopic("List", listId), {
+            id: listId,
+            changed: ["title", "items"],
+          });
+          return photos;
+        }),
+
+        read: Effect.fn("Wishlist.read")(function* (
+          listId: string,
+          viewer: string | undefined,
+          guest: string | undefined,
+        ) {
+          return yield* run(Store.readList(listId, viewer, guest));
         }),
 
         claim: Effect.fn("Wishlist.claim")(function* (
@@ -93,6 +112,19 @@ export default class Wishlist extends Cloudflare.DurableObject<Wishlist>()(
           viewer: string | undefined,
         ) {
           const result = yield* run(Store.claimItem(itemId, guest, viewer));
+          yield* publishToGuests(entityTopic("Item", itemId), {
+            id: itemId,
+            changed: ["remaining"],
+          });
+          return result;
+        }),
+
+        unclaim: Effect.fn("Wishlist.unclaim")(function* (
+          itemId: string,
+          guest: string,
+          viewer: string | undefined,
+        ) {
+          const result = yield* run(Store.unclaimItem(itemId, guest, viewer));
           yield* publishToGuests(entityTopic("Item", itemId), {
             id: itemId,
             changed: ["remaining"],
