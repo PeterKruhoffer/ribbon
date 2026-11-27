@@ -40,8 +40,11 @@ const uploaded = (photo: string) => photo.startsWith(photoPath);
 // Phone photos run to several MB. Redrawing one as a 1600 px JPEG keeps it
 // small, drops its location and other metadata, and turns HEIC and the like
 // into a type every browser shows. createImageBitmap applies EXIF rotation.
+// A canvas keeps only a GIF's first frame, so GIFs go up as they are, and the
+// Backend's type check and 5 MB limit apply to them unchanged.
 const maxSide = 1600;
-async function shrink(file: File) {
+async function shrink(file: File): Promise<Blob> {
+  if (file.type === "image/gif") return file;
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");

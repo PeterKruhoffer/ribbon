@@ -1,7 +1,10 @@
 import { daDK } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/react";
 import { createRootRoute, HeadContent, Outlet, Scripts, useRouter } from "@tanstack/react-router";
+import * as stylex from "@stylexjs/stylex";
 import appCss from "../styles.css?url";
+import { OpenBox } from "../ui/figures.tsx";
+import { Page, ui } from "../ui/kit.tsx";
 
 // In a build, the StyleX plugin appends every StyleX rule to styles.css. In dev
 // it serves them from a virtual stylesheet and reloads it on change.
@@ -22,6 +25,27 @@ export const Route = createRootRoute({
     scripts: devStylex ? [{ type: "module", src: "/@id/virtual:stylex:runtime" }] : [],
   }),
   component: RootDocument,
+  notFoundComponent: NotFound,
+});
+
+function NotFound() {
+  return (
+    <Page>
+      <OpenBox style={s.missing} />
+      <h1 {...stylex.props(ui.title)}>Siden blev ikke fundet</h1>
+      <p {...stylex.props(ui.sub)}>
+        Tjek adressen, eller{" "}
+        <a href="/" {...stylex.props(ui.link)}>
+          gå til forsiden
+        </a>
+        .
+      </p>
+    </Page>
+  );
+}
+
+const s = stylex.create({
+  missing: { maxWidth: 320, marginBottom: 20 },
 });
 
 function RootDocument() {
