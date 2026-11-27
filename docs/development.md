@@ -48,6 +48,10 @@ Clerk test emails such as `owner+clerk_test@example.com` sign in with code `4242
 
 `.github/workflows/deploy.yml` deploys every push to `main` to the `prod` stage, one run at a time. Threads deploy to `dev` and other stages, so they never overwrite `prod`. The workflow runs `pnpm check` and `pnpm build`, deploys, reads the URL from Alchemy state (`alchemy state cat Ribbon/prod/output`), and runs `pnpm verify:live` against it. The run's summary and the GitHub `prod` environment show the URL.
 
+When the deploy or `verify:live` fails, the workflow puts the last good version back. It asks GitHub for the newest successful run of this workflow on `main` (`gh run list --status success`), checks out that commit, and deploys it to `prod` with Alchemy. The run still fails, and its summary names the commit it rolled back to. A failed `pnpm check` or `pnpm build` deploys nothing, so it does not roll back. When no earlier run passed, nothing is rolled back.
+
+The rollback goes through Alchemy rather than Cloudflare's Worker rollback, so Alchemy's state matches what is live and the next deploy diffs against the right version. It replays the old code as a whole: a resource that the failed commit added is deleted, and Durable Object data that the new code already wrote stays, so old code must still read it. Fixing forward is a normal push to `main`.
+
 Alchemy's state lives in the account's Cloudflare state store, so CI and local deploys share it with no extra setup. The workflow copies `.env.example` to `.env` for the public Clerk values.
 
 Repository secrets, under Settings, Secrets and variables, Actions:

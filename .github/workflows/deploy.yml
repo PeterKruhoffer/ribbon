@@ -1,4 +1,5 @@
 # Deploys main to the `prod` stage on every push, then checks it end to end.
+# When the deploy or the checks fail, it redeploys the last commit that passed.
 # See docs/development.md, "Deploy from CI".
 name: Deploy
 
@@ -14,6 +15,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The rollback step reads earlier runs to find the last commit that passed.
+  actions: read
 
 jobs:
   deploy:
@@ -40,7 +43,8 @@ jobs:
       - run: pnpm check
       # Build before deploying, so a broken build fails before anything changes.
       - run: pnpm build
-      - run: pnpm run deploy --yes --no-input
+      - id: deploy
+        run: pnpm run deploy --yes --no-input
       - id: url
         run: |
           url=$(pnpm exec alchemy state cat "Ribbon/$ALCHEMY_STAGE/output" --no-input --log-level error 2>/dev/null \
@@ -56,3 +60,26 @@ jobs:
             exit 0
           fi
           RIBBON_OWNER_TOKEN=$(node scripts/owner-token.mjs) pnpm verify:live "${{ steps.url.outputs.url }}"
+      # Put the last good version back when the deploy or verify:live fails.
+      # Skipped when check or build fails, because nothing was deployed yet.
+      # The rollback redeploys that commit with Alchemy, so state stays in step,
+      # and the run still fails.
+      - name: Roll back to the last good commit
+        if: failure() && steps.deploy.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          good=$(gh run list --workflow deploy.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
+          if [ -z "$good" ]; then
+            echo "::error::No earlier deploy passed, so there is nothing to roll back to"
+            exit 1
+          fi
+          echo "Rolling back prod to $good"
+          git fetch --depth 1 origin "$good"
+          git checkout --force --detach "$good"
+          git clean -fdx -e node_modules
+          pnpm install --frozen-lockfile
+          cp .env.example .env
+          pnpm run deploy --yes --no-input
+          echo "::error::Deploy of $GITHUB_SHA failed, so prod was rolled back to $good"
+          echo "Rolled back to $good after $GITHUB_SHA failed" >> "$GITHUB_STEP_SUMMARY"
